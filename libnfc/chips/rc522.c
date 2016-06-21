@@ -133,6 +133,9 @@ int rc522_start_command(struct nfc_device * pnd, rc522_cmd cmd) {
 		case CMD_MEM:
 		case CMD_GENRANDOMID:
 		case CMD_CALCCRC:
+			needsRX = true;
+			break;
+
 		case CMD_TRANSMIT:
 		case CMD_SOFTRESET:
 			needsRX = false;
@@ -712,7 +715,7 @@ int rc522_self_test(struct nfc_device * pnd) {
 	CHK(rc522_write_bulk(pnd, REG_FIFODataReg, zeroes, sizeof(zeroes)));
 	CHK(rc522_start_command(pnd, CMD_MEM));
 	// 3. Enable the self test by writing 0x09 to the AutoTestReg register
-	CHK(rc522_write_reg_mask(pnd, REG_AutoTestReg, REG_AutoTestReg_SelfTest_Enabled, REG_AutoTestReg_SelfTest_MASK));
+	CHK(rc522_write_reg(pnd, REG_AutoTestReg, REG_AutoTestReg_SelfTest_Enabled));
 	// 4. Write 0x00h to the FIFO buffer
 	CHK(rc522_write_reg(pnd, REG_FIFODataReg, 0x00));
 	// 5. Start the self test with the CalcCRC command
@@ -721,7 +724,7 @@ int rc522_self_test(struct nfc_device * pnd) {
 	// 6. Wait for the RC522 to calculate the selftest values
 	// The official datasheet does not mentions how much time does it take, let's use 50ms
 	timeout_t to;
-	timeout_init(&to, 50);
+	timeout_init(&to, 150);
 
 	while (1) {
 		if (!timeout_check(&to)) {
@@ -732,8 +735,15 @@ int rc522_self_test(struct nfc_device * pnd) {
 		CHK(rc522_read_reg(pnd, REG_DivIrqReg));
 
 		// If the RC522 has finished calculating the CRC proceed
-		if (ret & REG_DivIrqReg_CRCIRq) {
-			break;
+		if (ret & REG_DivIrqReg_Set2){
+			if (ret & REG_DivIrqReg_CRCIRq) {
+				break;
+			}
+		}
+		else {
+			if ((ret & REG_DivIrqReg_CRCIRq)==0) {
+				break;
+			}
 		}
 	}
 

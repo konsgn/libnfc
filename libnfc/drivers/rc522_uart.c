@@ -44,7 +44,7 @@
 #define RC522_UART_DRIVER_NAME "rc522_uart"
 
 #define BOOT_BAUD_RATE 9600
-#define DEFAULT_BAUD_RATE 115200
+#define DEFAULT_BAUD_RATE 9600
 #define DRIVER_NAME "rc522_uart"
 #define IO_TIMEOUT 50
 
