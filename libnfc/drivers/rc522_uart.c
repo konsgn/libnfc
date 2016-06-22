@@ -44,7 +44,7 @@
 #define RC522_UART_DRIVER_NAME "rc522_uart"
 
 #define BOOT_BAUD_RATE 9600
-#define DEFAULT_BAUD_RATE 9600
+#define DEFAULT_BAUD_RATE 115200
 #define DRIVER_NAME "rc522_uart"
 #define IO_TIMEOUT 50
 
@@ -334,8 +334,9 @@ int rc522_uart_upgrade_baud_rate(struct nfc_device * pnd) {
 	MODIF !!!
 	CHK(uart_set_speed(DRIVER_DATA(pnd)->port, userBaudRate));
 	*/
-	uart_set_speed(DRIVER_DATA(pnd)->port, userBaudRate);
+	//Konsgn: Set baud before changing port speed!
 	CHK(rc522_send_baudrate(pnd, userBaudRate));
+	uart_set_speed(DRIVER_DATA(pnd)->port, userBaudRate);
 
 	return NFC_SUCCESS;
 }

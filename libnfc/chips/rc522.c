@@ -670,7 +670,7 @@ int rc522_abort(struct nfc_device * pnd) {
 
 int rc522_powerdown(struct nfc_device * pnd) {
 	//return rc522_write_reg(pnd, REG_CommandReg, REG_CommandReg_RcvOff | REG_CommandReg_PowerDown | CMD_NOCMDCHANGE);
-	return rc522_write_reg(pnd, REG_CommandReg, REG_CommandReg_RcvOff | CMD_NOCMDCHANGE);
+	return rc522_write_reg(pnd, REG_CommandReg, REG_CommandReg_RcvOff | CMD_SOFTRESET); 
 }
 
 // NXP MFRC522 datasheet section 16.1.1
