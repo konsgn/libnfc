@@ -482,6 +482,9 @@ int rc522_transceive(struct nfc_device * pnd, const uint8_t * txData, const size
 }
 
 int rc522_initiator_transceive_bits(struct nfc_device * pnd, const uint8_t * txData, const size_t txBits, const uint8_t * pbtTxPar, uint8_t * rxData, uint8_t * pbtRxPar) {
+	#ifdef func_DEBUG 
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_initiator_transceive_bits");
+	#endif
 	int ret;
 	// TODO: Do something with pbtTxPar and pbtRxPar
 	CHK(rc522_transceive(pnd, txData, txBits, rxData, ~0, TIMEOUT_DEFAULT));
@@ -489,10 +492,16 @@ int rc522_initiator_transceive_bits(struct nfc_device * pnd, const uint8_t * txD
 }
 
 int rc522_initiator_transceive_bytes(struct nfc_device * pnd, const uint8_t * txData, const size_t txSize, uint8_t * rxData, const size_t rxMaxBytes, int timeout) {
+	#ifdef func_DEBUG 
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_initiator_transceive_bytes");
+	#endif
 	return rc522_transceive(pnd, txData, txSize * 8, rxData, rxMaxBytes, timeout);
 }
 
 int rc522_get_supported_modulation(struct nfc_device * pnd, const nfc_mode mode, const nfc_modulation_type ** const supported_mt) {
+	#ifdef func_DEBUG 
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_get_supported_modulation");
+	#endif
 	(void) pnd;
 
 	switch (mode) {
@@ -512,6 +521,9 @@ int rc522_get_supported_modulation(struct nfc_device * pnd, const nfc_mode mode,
 }
 
 int rc522_get_supported_baud_rate(struct nfc_device * pnd, const nfc_mode mode, const nfc_modulation_type nmt, const nfc_baud_rate ** const supported_br) {
+	#ifdef func_DEBUG 
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_get_supported_baud_rate");
+	#endif
 	(void) pnd;
 
 	switch (mode) {
@@ -535,6 +547,9 @@ int rc522_get_supported_baud_rate(struct nfc_device * pnd, const nfc_mode mode, 
 }
 
 int rc522_set_property_bool(struct nfc_device * pnd, const nfc_property property, const bool enable) {
+	#ifdef func_DEBUG 
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_set_property_bool property:%02x bool:%02x",property,enable);
+	#endif
 	int ret;
 
 	switch (property) {
@@ -618,6 +633,9 @@ int rc522_set_property_bool(struct nfc_device * pnd, const nfc_property property
 }
 
 int rc522_set_property_int(struct nfc_device * pnd, const nfc_property property, const int value) {
+	#ifdef func_DEBUG 
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_set_property_int");
+	#endif
 	switch (property) {
 		case NP_TIMEOUT_COMMAND:
 			if (value >= 0) {
@@ -653,11 +671,17 @@ int rc522_set_property_int(struct nfc_device * pnd, const nfc_property property,
 }
 
 int rc522_initiator_init(struct nfc_device * pnd) {
+	#ifdef func_DEBUG 
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_initiator_init");
+	#endif
 	// TODO: Should we be doing something here?
 	return NFC_SUCCESS;
 }
 
 int rc522_abort(struct nfc_device * pnd) {
+	#ifdef func_DEBUG 
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_abort");
+	#endif
 	int ret;
 
 	// Halt any running commands
@@ -669,6 +693,9 @@ int rc522_abort(struct nfc_device * pnd) {
 }
 
 int rc522_powerdown(struct nfc_device * pnd) {
+	#ifdef func_DEBUG 
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_powerdown");
+	#endif
 	//return rc522_write_reg(pnd, REG_CommandReg, REG_CommandReg_RcvOff | REG_CommandReg_PowerDown | CMD_NOCMDCHANGE);
 	return rc522_write_reg(pnd, REG_CommandReg, REG_CommandReg_RcvOff | CMD_SOFTRESET); 
 }
@@ -688,6 +715,9 @@ const uint8_t MFRC522_V2_SELFTEST[FIFO_SIZE] = {
 };
 
 int rc522_self_test(struct nfc_device * pnd) {
+	#ifdef func_DEBUG 
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_self_test");
+	#endif
 	const uint8_t * correct;
 	switch (CHIP_DATA(pnd)->version) {
 		case MFRC522_V1:
@@ -764,6 +794,9 @@ int rc522_self_test(struct nfc_device * pnd) {
 }
 
 int rc522_init(struct nfc_device * pnd) {
+	#ifdef func_DEBUG 
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_init");
+	#endif
 	int ret;
 
 	int version = CHK(rc522_read_reg(pnd, REG_VersionReg));

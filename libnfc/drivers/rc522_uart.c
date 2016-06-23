@@ -45,7 +45,6 @@
 
 #define BOOT_BAUD_RATE 9600
 #define DEFAULT_BAUD_RATE 115200
-#define DRIVER_NAME "rc522_uart"
 #define IO_TIMEOUT 50
 
 #define DRIVER_DATA(pnd) ((struct rc522_uart_data*)(pnd->driver_data))
@@ -74,6 +73,9 @@ int rc522_uart_wakeup(struct nfc_device * pnd) {
 */
 
 void rc522_uart_close(nfc_device * pnd) {
+	#ifdef func_DEBUG 
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_uart_close");
+	#endif
 	rc522_powerdown(pnd);
 	// Release UART port
 	uart_close(DRIVER_DATA(pnd)->port);
@@ -172,6 +174,9 @@ int rc522_uart_create(const nfc_context * context, const nfc_connstring connstri
 }
 
 size_t rc522_uart_scan(const nfc_context * context, nfc_connstring connstrings[], const size_t connstrings_len) {
+	#ifdef func_DEBUG 
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_uart_scan");
+	#endif
 	size_t device_found = 0;
 	char ** acPorts = uart_list_ports();
 	const char * acPort;
@@ -179,7 +184,7 @@ size_t rc522_uart_scan(const nfc_context * context, nfc_connstring connstrings[]
 
 	while ((acPort = acPorts[iDevice++])) {
 		nfc_connstring connstring;
-		snprintf(connstring, sizeof(nfc_connstring), "%s:%s:%"PRIu32, DRIVER_NAME, acPort, DEFAULT_BAUD_RATE);
+		snprintf(connstring, sizeof(nfc_connstring), "%s:%s:%"PRIu32, RC522_UART_DRIVER_NAME, acPort, DEFAULT_BAUD_RATE);
 
 		nfc_device * pnd;
 		int ret = rc522_uart_create(context, connstring, acPort, DEFAULT_BAUD_RATE, &pnd);
@@ -205,13 +210,16 @@ size_t rc522_uart_scan(const nfc_context * context, nfc_connstring connstrings[]
 }
 
 struct nfc_device * rc522_uart_open(const nfc_context * context, const nfc_connstring connstring) {
+	#ifdef func_DEBUG 
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_uart_open");
+	#endif
 	char * port_str = NULL;
 	char * baud_str = NULL;
 	uint32_t baudrate;
 	char * endptr;
 	struct nfc_device * pnd = NULL;
 
-	int decodelvl = connstring_decode(connstring, DRIVER_NAME, NULL, &port_str, &baud_str);
+	int decodelvl = connstring_decode(connstring, RC522_UART_DRIVER_NAME, NULL, &port_str, &baud_str);
 	switch (decodelvl) {
 		case 2: // Got port but no speed
 			baudrate = DEFAULT_BAUD_RATE;
@@ -349,25 +357,34 @@ const struct rc522_io rc522_uart_io = {
 };
 
 const struct nfc_driver rc522_uart_driver = {
-	.name								= DRIVER_NAME,
+	.name								= RC522_UART_DRIVER_NAME,
 	.scan_type							= INTRUSIVE,
 	.scan								= rc522_uart_scan,
 	.open								= rc522_uart_open,
 	.close								= rc522_uart_close,
 //	.strerror							= rc522_strerror,
+	//.strerror							= NULL,
 
 	.initiator_init						= rc522_initiator_init,
 	// MFRC522 has no secure element
 	.initiator_init_secure_element		= NULL,
 //	.initiator_select_passive_target	= rc522_initiator_select_passive_target,
 //	.initiator_poll_target				= rc522_initiator_poll_target,
+	//.initiator_select_passive_target	= NULL,
+	//.initiator_poll_target				= NULL,
+	
 	.initiator_select_dep_target		= NULL,
 //	.initiator_deselect_target			= rc522_initiator_deselect_target,
+	//.initiator_deselect_target			= NULL,
+
 	.initiator_transceive_bytes			= rc522_initiator_transceive_bytes,
 	.initiator_transceive_bits			= rc522_initiator_transceive_bits,
 //	.initiator_transceive_bytes_timed	= rc522_initiator_transceive_bytes_timed,
 //	.initiator_transceive_bits_timed	= rc522_initiator_transceive_bits_timed,
 //	.initiator_target_is_present		= rc522_initiator_target_is_present,
+	//.initiator_transceive_bytes_timed	= NULL,
+	//.initiator_transceive_bits_timed	= NULL,
+	//.initiator_target_is_present		= NULL,
 
 	// MFRC522 is unable to work as target
 	.target_init					 	= NULL,
@@ -381,9 +398,12 @@ const struct nfc_driver rc522_uart_driver = {
 	.get_supported_modulation			= rc522_get_supported_modulation,
 	.get_supported_baud_rate			= rc522_get_supported_baud_rate,
 //	.device_get_information_about		= rc522_get_information_about,
+	//.device_get_information_about		= NULL,
 
 	.abort_command						= rc522_abort,
 //	.idle								= rc522_idle,
+	//.idle								= NULL,
+
 	.powerdown							= rc522_powerdown,
 };
 

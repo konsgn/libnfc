@@ -7,6 +7,9 @@
 // This is the default value for water level IRQs
 #define DEFAULT_WATER_LEVEL 8
 
+// Enable logging of important function entries
+#define func_DEBUG 
+
 typedef enum {
 	RC522_UNKNOWN = 0x00,
 	FM17522 = 0x88,
