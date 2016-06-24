@@ -363,28 +363,23 @@ const struct nfc_driver rc522_uart_driver = {
 	.open								= rc522_uart_open,
 	.close								= rc522_uart_close,
 //	.strerror							= rc522_strerror,
-	//.strerror							= NULL,
 
 	.initiator_init						= rc522_initiator_init,
 	// MFRC522 has no secure element
 	.initiator_init_secure_element		= NULL,
-//	.initiator_select_passive_target	= rc522_initiator_select_passive_target,
+	
+	//TODO Verify functionality
+	.initiator_select_passive_target	= rc522_initiator_select_passive_target,
 //	.initiator_poll_target				= rc522_initiator_poll_target,
-	//.initiator_select_passive_target	= NULL,
-	//.initiator_poll_target				= NULL,
 	
 	.initiator_select_dep_target		= NULL,
 //	.initiator_deselect_target			= rc522_initiator_deselect_target,
-	//.initiator_deselect_target			= NULL,
 
 	.initiator_transceive_bytes			= rc522_initiator_transceive_bytes,
 	.initiator_transceive_bits			= rc522_initiator_transceive_bits,
 //	.initiator_transceive_bytes_timed	= rc522_initiator_transceive_bytes_timed,
 //	.initiator_transceive_bits_timed	= rc522_initiator_transceive_bits_timed,
 //	.initiator_target_is_present		= rc522_initiator_target_is_present,
-	//.initiator_transceive_bytes_timed	= NULL,
-	//.initiator_transceive_bits_timed	= NULL,
-	//.initiator_target_is_present		= NULL,
 
 	// MFRC522 is unable to work as target
 	.target_init					 	= NULL,
@@ -398,11 +393,9 @@ const struct nfc_driver rc522_uart_driver = {
 	.get_supported_modulation			= rc522_get_supported_modulation,
 	.get_supported_baud_rate			= rc522_get_supported_baud_rate,
 //	.device_get_information_about		= rc522_get_information_about,
-	//.device_get_information_about		= NULL,
 
 	.abort_command						= rc522_abort,
 //	.idle								= rc522_idle,
-	//.idle								= NULL,
 
 	.powerdown							= rc522_powerdown,
 };

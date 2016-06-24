@@ -295,16 +295,53 @@ int rc522_set_rf_baud_rate(struct nfc_device * pnd, nfc_baud_rate speed) {
 	return NFC_SUCCESS;
 }
 
-int rc522_initiator_select_passive_target_ext(struct nfc_device * pnd, const nfc_modulation nm, const uint8_t * pbtInitData, const size_t szInitData, nfc_target * pnt, int timeout) {
-	int ret;
+int rc522_initiator_select_passive_target(struct nfc_device *pnd,
+                                      const nfc_modulation nm,
+                                      const uint8_t *pbtInitData, const size_t szInitData,
+                                      nfc_target *pnt)
+{
+  return rc522_initiator_select_passive_target_ext(pnd, nm, pbtInitData, szInitData, pnt, 0);
+}
 
+int rc522_initiator_select_passive_target_ext(struct nfc_device * pnd, const nfc_modulation nm, const uint8_t * pbtInitData, const size_t szInitData, nfc_target * pnt, int timeout) {	
+	#ifdef func_DEBUG 
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_initiator_select_passive_target_ext");
+	#endif
+	int ret;
+	uint8_t  abtTargetsData[64];
+	size_t  szTargetsData = sizeof(abtTargetsData);
+	
 	if (nm.nmt != NMT_ISO14443A) {
 		return NFC_EINVARG;
 	}
 
 	CHK(rc522_set_rf_baud_rate(pnd, nm.nbr));
 
-	// TODO
+	// TODO Verify
+	do{
+	  if ((ret = rc522_initiator_transceive_bytes(pnd, pbtInitData, szInitData, abtTargetsData, sizeof(abtTargetsData), timeout)) < 0) {
+        if ((ret == NFC_ERFTRANS)) { // Chip timeout
+          continue;
+        } else
+          return ret;
+      }
+		//if ((nm.nmt == NMT_ISO14443A) && (nm.nbr != NBR_106)) {
+		  ////uint8_t pncmd_inpsl[4] = { InPSL, 0x01 };
+		  ////pncmd_inpsl[2] = nm.nbr - 1;
+		  ////pncmd_inpsl[3] = nm.nbr - 1;
+		  //if ((ret = pn53x_transceive(pnd, pbtInitData, szInitData, NULL, 0, 0)) < 0) {
+			//return ret;
+		  //}
+		//}
+	}while (pnd->bInfiniteSelect);
+
+	 if ((ret = rc522_initiator_transceive_bytes(pnd, pbtInitData, szInitData, abtTargetsData, sizeof(abtTargetsData), timeout)) < 0) {
+		if ((ret == NFC_ERFTRANS)) { // Chip timeout
+		  return NFC_ENOTIMPL;
+		} else
+		  return ret;
+	  }
+	
 	return NFC_ENOTIMPL;
 }
 
@@ -548,7 +585,7 @@ int rc522_get_supported_baud_rate(struct nfc_device * pnd, const nfc_mode mode, 
 
 int rc522_set_property_bool(struct nfc_device * pnd, const nfc_property property, const bool enable) {
 	#ifdef func_DEBUG 
-	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_set_property_bool property:%02x bool:%02x",property,enable);
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_set_property_bool property:%x bool:%x",property,enable);
 	#endif
 	int ret;
 
@@ -674,6 +711,8 @@ int rc522_initiator_init(struct nfc_device * pnd) {
 	#ifdef func_DEBUG 
 	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_initiator_init");
 	#endif
+
+	
 	// TODO: Should we be doing something here?
 	return NFC_SUCCESS;
 }
