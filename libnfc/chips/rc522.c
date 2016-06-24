@@ -368,7 +368,8 @@ int rc522_rf_tx(struct nfc_device * pnd, const uint8_t * txData, const size_t tx
 
 	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_tx: sending %d bits (%d bytes).", txBits, txBytes);
 
-	CHK(rc522_write_reg(pnd, REG_ComIrqReg, REG_ComIrqReg_TxIRq | REG_ComIrqReg_RxIRq | REG_ComIrqReg_LoAlertIRq | REG_ComIrqReg_ErrIRq));
+	//CHK(rc522_write_reg(pnd, REG_ComIrqReg, REG_ComIrqReg_TxIRq | REG_ComIrqReg_RxIRq | REG_ComIrqReg_LoAlertIRq | REG_ComIrqReg_ErrIRq));
+		CHK(rc522_write_reg(pnd, REG_ComIrqReg, REG_ComIrqReg_Set1 ));
 	CHK(rc522_write_bulk(pnd, REG_FIFODataReg, txData, transmitted));
 
 	if (transceive) {
@@ -432,7 +433,8 @@ int rc522_rf_rx(struct nfc_device * pnd, uint8_t * rxData, const size_t rxMaxByt
 	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_rx: receiving up to %d bytes.", rxMaxBytes);
 
 	if (!transceive) {
-		CHK(rc522_write_reg(pnd, REG_ComIrqReg, REG_ComIrqReg_TxIRq | REG_ComIrqReg_RxIRq | REG_ComIrqReg_LoAlertIRq | REG_ComIrqReg_ErrIRq));
+		//CHK(rc522_write_reg(pnd, REG_ComIrqReg, REG_ComIrqReg_TxIRq | REG_ComIrqReg_RxIRq | REG_ComIrqReg_LoAlertIRq | REG_ComIrqReg_ErrIRq));
+		CHK(rc522_write_reg(pnd, REG_ComIrqReg, REG_ComIrqReg_Set1 ));
 		CHK(rc522_start_command(pnd, CMD_RECEIVE));
 	}
 
@@ -446,6 +448,8 @@ int rc522_rf_rx(struct nfc_device * pnd, uint8_t * rxData, const size_t rxMaxByt
 
 		if (irqs & REG_ComIrqReg_ErrIRq) {
 			log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_rx: RC522 set ErrIRq flag.");
+			int err = CHK(rc522_read_reg(pnd, REG_ErrorReg));
+			log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_rx: ErrIRq:%02X", err);
 			// If the RC522 detects an error abort the transmission and notify the caller
 			return NFC_ECHIP;
 		}
@@ -778,6 +782,10 @@ int rc522_self_test(struct nfc_device * pnd) {
 	memset(zeroes, 0x00, sizeof(zeroes));
 
 	int ret;
+	//Make sure that used registers are set as expected in terms of meaning by set(1|2)
+	CHK(rc522_write_reg(pnd, REG_DivIrqReg, 0x80));
+	CHK(rc522_write_reg(pnd, REG_ComIrqReg, 0x80));
+	
 	// MFRC522 datasheet section 16.1.1
 	// 1. Perform a soft reset
 	CHK(rc522_soft_reset(pnd));
@@ -805,16 +813,10 @@ int rc522_self_test(struct nfc_device * pnd) {
 		CHK(rc522_read_reg(pnd, REG_DivIrqReg));
 
 		// If the RC522 has finished calculating the CRC proceed
-		if (ret & REG_DivIrqReg_Set2){
-			if (ret & REG_DivIrqReg_CRCIRq) {
-				break;
-			}
+		if ((ret & REG_DivIrqReg_CRCIRq)==0) {
+			break;
 		}
-		else {
-			if ((ret & REG_DivIrqReg_CRCIRq)==0) {
-				break;
-			}
-		}
+		
 	}
 
 	uint8_t response[FIFO_SIZE];

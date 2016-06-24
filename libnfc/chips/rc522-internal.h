@@ -52,7 +52,7 @@ typedef enum {
 #define REG_DivIrqReg	0x05
 #define REG_DivIrqReg_MfinActIRq	(1 << 4)
 #define REG_DivIrqReg_CRCIRq	(1 << 2)
-#define REG_DivIrqReg_Set2	(1 << 7)
+#define REG_DivIrqReg_Set2	(1 << 7) //only write, not read.
 
 #define REG_ErrorReg	0x06
 
