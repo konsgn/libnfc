@@ -301,16 +301,19 @@ int rc522_initiator_select_passive_target(struct nfc_device *pnd,
                                       const uint8_t *pbtInitData, const size_t szInitData,
                                       nfc_target *pnt)
 {
-  return rc522_initiator_select_passive_target_ext(pnd, nm, pbtInitData, szInitData, pnt, 0);
+  return rc522_initiator_select_passive_target_ext(pnd, nm, pbtInitData, szInitData, pnt, 2000); 
 }
 
 int rc522_initiator_select_passive_target_ext(struct nfc_device * pnd, const nfc_modulation nm, const uint8_t * pbtInitData, const size_t szInitData, nfc_target * pnt, int timeout) {	
 	#ifdef func_DEBUG 
-	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_initiator_select_passive_target_ext");
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_initiator_select_passive_target_ext szintdata:%d",szInitData);
+	
 	#endif
 	int ret;
 	uint8_t  abtTargetsData[64];
 	size_t  szTargetsData = sizeof(abtTargetsData);
+	nfc_target nttmp;
+	memset(&nttmp, 0x00, sizeof(nfc_target));
 	
 	if (nm.nmt != NMT_ISO14443A) {
 		return NFC_EINVARG;
