@@ -159,6 +159,7 @@ int rc522_start_command(struct nfc_device * pnd, rc522_cmd cmd) {
 	if (!needsRX) {
 		regval |= REG_CommandReg_RcvOff;
 	}
+	
 
 	return rc522_write_reg(pnd, REG_CommandReg, regval);
 }
@@ -427,14 +428,15 @@ int rc522_rf_rx(struct nfc_device * pnd, uint8_t * rxData, const size_t rxMaxByt
 	int ret;
 	size_t received = 0;
 
-	// Clear this as early as possible
-	CHK(rc522_write_reg(pnd, REG_ComIrqReg, REG_ComIrqReg_HiAlertIRq));
-
+	// Clear all irq's as early as possible
+	CHK(rc522_write_reg(pnd, REG_ComIrqReg, 0xff^REG_ComIrqReg_Set1));
+			
 	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_rx: receiving up to %d bytes.", rxMaxBytes);
 
 	if (!transceive) {
 		//CHK(rc522_write_reg(pnd, REG_ComIrqReg, REG_ComIrqReg_TxIRq | REG_ComIrqReg_RxIRq | REG_ComIrqReg_LoAlertIRq | REG_ComIrqReg_ErrIRq));
-		CHK(rc522_write_reg(pnd, REG_ComIrqReg, REG_ComIrqReg_Set1 ));
+		CHK(rc522_write_reg(pnd, REG_ComIrqReg, 0xff^REG_ComIrqReg_Set1));	
+		//rc522_abort(pnd);
 		CHK(rc522_start_command(pnd, CMD_RECEIVE));
 	}
 
@@ -445,11 +447,12 @@ int rc522_rf_rx(struct nfc_device * pnd, uint8_t * rxData, const size_t rxMaxByt
 		}
 
 		int irqs = CHK(rc522_read_reg(pnd, REG_ComIrqReg));
+		//int errs = CHK(rc522_read_reg(pnd, REG_ErrorReg));
 
 		if (irqs & REG_ComIrqReg_ErrIRq) {
-			log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_rx: RC522 set ErrIRq flag.");
-			int err = CHK(rc522_read_reg(pnd, REG_ErrorReg));
-			log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_rx: ErrIRq:%02X", err);
+			log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_rx: RC522 has Error");
+			int errs = CHK(rc522_read_reg(pnd, REG_ErrorReg));
+			log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_rx: Errors:%02X", errs);
 			// If the RC522 detects an error abort the transmission and notify the caller
 			return NFC_ECHIP;
 		}
@@ -839,6 +842,8 @@ int rc522_init(struct nfc_device * pnd) {
 	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_init");
 	#endif
 	int ret;
+	
+	CHK(rc522_start_command(pnd, CMD_IDLE));
 
 	int version = CHK(rc522_read_reg(pnd, REG_VersionReg));
 	CHIP_DATA(pnd)->version = version;
