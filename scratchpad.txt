@@ -1,0 +1,4 @@
+adding 
+
+rc522_query_a_tags: To handle the transmission and reception of REQA / ATQA
+
