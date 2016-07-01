@@ -36,7 +36,7 @@
 #define LOG_CATEGORY "libnfc.chip.rc522"
 #define LOG_GROUP NFC_LOG_GROUP_CHIP
 
-#define TIMEOUT_DEFAULT -1
+#define TIMEOUT_DEFAULT 50
 #define TIMEOUT_NEVER 0
 
 const nfc_modulation_type rc522_initiator_modulation[] = { NMT_ISO14443A, 0 };
@@ -373,7 +373,7 @@ int rc522_rf_tx(struct nfc_device * pnd, const uint8_t * txData, const size_t tx
 	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_tx: sending %d bits (%d bytes).", txBits, txBytes);
 
 	//CHK(rc522_write_reg(pnd, REG_ComIrqReg, REG_ComIrqReg_TxIRq | REG_ComIrqReg_RxIRq | REG_ComIrqReg_LoAlertIRq | REG_ComIrqReg_ErrIRq));
-		CHK(rc522_write_reg(pnd, REG_ComIrqReg, REG_ComIrqReg_Set1 ));
+		CHK(rc522_write_reg(pnd, REG_ComIrqReg, 0xff^REG_ComIrqReg_Set1 ));
 	CHK(rc522_write_bulk(pnd, REG_FIFODataReg, txData, transmitted));
 
 	if (transceive) {
@@ -501,10 +501,13 @@ int rc522_rf_rx(struct nfc_device * pnd, uint8_t * rxData, const size_t rxMaxByt
 int rc522_transceive(struct nfc_device * pnd, const uint8_t * txData, const size_t txBits, uint8_t * rxData, const size_t rxMaxBytes, int timeout) {
 	int ret;
 
-	bool doTX = txData != NULL && txBits > 0;
-	bool doRX = rxData != NULL && rxMaxBytes > 0;
+	bool doTX = ((txData != NULL) && txBits > 0);
+	bool doRX = ((rxData != NULL) );
 	bool isTransceive = doTX && doRX;
 
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_transceive: is transcieve: %d", doTX);
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_transceive: is transcieve: %d:%d", rxData,rxMaxBytes);
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_transceive: is transcieve: %d", isTransceive);
 	CHK(rc522_abort(pnd));
 
 	timeout_t to;

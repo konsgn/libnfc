@@ -30,6 +30,28 @@ typedef enum {
 	CMD_SOFTRESET = 0xF
 } rc522_cmd;
 
+//Adding definitions to know how to communicate with 14443A cards as they are not found elsewhere
+//short frame commands (7 bits)
+#define REQA 0x26
+#define WUPA 0x52
+//standard frame commands (1 byte)
+#define HLTA 0x50
+#define SEL  0x93 
+#define SEL2 0x95 
+#define SEL3 0x97 
+
+//14443A usefull bit masks:
+//Don't use ATQA, it is liable to have collisions, just detect if tag exists here.
+#define ATQA_UID_sz_UNPACK(x) ((x>>6) & 3)
+#define ATQA_Bit_Frame_UNPACK(x) ((x>>0) & 0x1F)
+//Helpfull masks for handling NVB coding
+#define NVB_Bytes_PACK(x) ((x & 7) << 4) //full bytes tx'd with sel command, 
+#define NVB_Bits_PACK(x)  ((x & F) << 0) //bits left over (total bits modulo 8)
+//Masks to detect complete UID
+#define SEL_nUID (1<< 2) // 0 if uid is complete
+#define SEL_ISO14443_4_compliance (1<<5) //do I even care? 
+
+
 #define REG_CommandReg	0x01
 #define REG_CommandReg_RcvOff	(1 << 5)
 #define REG_CommandReg_PowerDown	(1 << 4)
@@ -80,6 +102,11 @@ typedef enum {
 #define REG_BitFramingReg_TxLastBits_UNPACK(x) ((x >> 0) & 7)
 
 #define REG_CollReg	0x0E
+#define REG_CollReg_ValuesAfterColl	(1 << 7)
+#define REG_CollReg_CollPosNotValid	(1 << 5)
+//#define REG_CollReg_CollPos_PACK(x) ((x & 0x1F) << 0) _UNPACK(x) ((x >> 0) & 7) //no reason to write
+#define REG_CollReg_CollPos_UNPACK(x) ((x >> 0) & 0x1F)
+
 
 #define REG_ModeReg	0x11
 
