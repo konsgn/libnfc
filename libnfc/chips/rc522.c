@@ -372,10 +372,12 @@ int rc522_rf_tx(struct nfc_device * pnd, const uint8_t * txData, const size_t tx
 
 	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_tx: sending %d bits (%d bytes).", txBits, txBytes);
 
-	//CHK(rc522_write_reg(pnd, REG_ComIrqReg, REG_ComIrqReg_TxIRq | REG_ComIrqReg_RxIRq | REG_ComIrqReg_LoAlertIRq | REG_ComIrqReg_ErrIRq));
-		CHK(rc522_write_reg(pnd, REG_ComIrqReg, 0xff^REG_ComIrqReg_Set1 ));
+	CHK(rc522_write_reg(pnd, REG_ComIrqReg, REG_ComIrqReg_TxIRq | REG_ComIrqReg_RxIRq | REG_ComIrqReg_HiAlertIRq | REG_ComIrqReg_LoAlertIRq | REG_ComIrqReg_ErrIRq));
+		//CHK(rc522_write_reg(pnd, REG_ComIrqReg, 0xff^REG_ComIrqReg_Set1 ));
 	CHK(rc522_write_bulk(pnd, REG_FIFODataReg, txData, transmitted));
-
+	
+	//set bit count before starting tx
+	CHK(rc522_write_reg(pnd, REG_BitFramingReg, REG_BitFramingReg_RxAlign_PACK(0) | REG_BitFramingReg_TxLastBits_PACK(txBits)));
 	if (transceive) {
 		// If transceiving we must first start the command and then configure framing and start transmission
 		CHK(rc522_start_command(pnd, CMD_TRANSCEIVE));
@@ -422,7 +424,10 @@ int rc522_rf_tx(struct nfc_device * pnd, const uint8_t * txData, const size_t tx
 			log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_tx: fed another %d bytes to FIFO.", chunkSize);
 		}
 	}
-
+	//if (transceive) {
+		//CHK(rc522_write_reg_mask(pnd, REG_BitFramingReg, !REG_BitFramingReg_StartSend,REG_BitFramingReg_StartSend));
+	//}
+		
 	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_tx: transmission finished.");
 	return NFC_SUCCESS;
 }
@@ -430,19 +435,26 @@ int rc522_rf_tx(struct nfc_device * pnd, const uint8_t * txData, const size_t tx
 int rc522_rf_rx(struct nfc_device * pnd, uint8_t * rxData, const size_t rxMaxBytes, timeout_t * timeout, bool transceive) {
 	int ret;
 	size_t received = 0;
+	
 
-	// Clear all irq's as early as possible
-	CHK(rc522_write_reg(pnd, REG_ComIrqReg, 0xff^REG_ComIrqReg_Set1));
 			
 	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_rx: receiving up to %d bytes.", rxMaxBytes);
 
 	if (!transceive) {
+	// Clear all irq's as early as possible... only if not transcieving
+	CHK(rc522_write_reg(pnd, REG_ComIrqReg, 0xff^REG_ComIrqReg_Set1));
 		//CHK(rc522_write_reg(pnd, REG_ComIrqReg, REG_ComIrqReg_TxIRq | REG_ComIrqReg_RxIRq | REG_ComIrqReg_LoAlertIRq | REG_ComIrqReg_ErrIRq));
 		CHK(rc522_write_reg(pnd, REG_ComIrqReg, 0xff^REG_ComIrqReg_Set1));	
 		//rc522_abort(pnd);
 		CHK(rc522_start_command(pnd, CMD_RECEIVE));
 	}
-
+	else {
+		CHK(rc522_read_reg(pnd, REG_FIFOLevelReg));
+		CHK(rc522_read_reg(pnd, REG_RxModeReg));
+		CHK(rc522_read_reg(pnd, REG_TxModeReg));
+		CHK(rc522_read_reg(pnd, REG_Status1Reg));
+		CHK(rc522_read_reg(pnd, REG_Status2Reg));
+	}
 	while (1) {
 		if (!timeout_check(timeout)) {
 			log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_rx: transmission timeout.");
@@ -505,8 +517,8 @@ int rc522_transceive(struct nfc_device * pnd, const uint8_t * txData, const size
 	bool doRX = ((rxData != NULL) );
 	bool isTransceive = doTX && doRX;
 
-	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_transceive: is transcieve: %d", doTX);
-	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_transceive: is transcieve: %d:%d", rxData,rxMaxBytes);
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_transceive: is doTX: %d", doTX);
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_transceive: is rxData,max: %d:%d", rxData,rxMaxBytes);
 	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_transceive: is transcieve: %d", isTransceive);
 	CHK(rc522_abort(pnd));
 
@@ -853,6 +865,10 @@ int rc522_init(struct nfc_device * pnd) {
 
 	int version = CHK(rc522_read_reg(pnd, REG_VersionReg));
 	CHIP_DATA(pnd)->version = version;
+
+	CHK(rc522_write_reg(pnd, REG_TxASKReg, 0x40));
+	CHK(rc522_write_reg(pnd, REG_ModeReg, 0x29));
+	CHK(rc522_write_reg(pnd, REG_TxControlReg, 0x03));
 
 	ret = rc522_self_test(pnd);
 	if (ret == NFC_EDEVNOTSUPP) {
