@@ -1,5 +1,7 @@
 adding to rc522 module 
 
+-rc522_InListPassiveTarget:
+
 -rc522_query_a_tags: To handle the transmission and reception of REQA / ATQA
 doesnt matter if there is a collision, we just need to know if cards available.
 ?alternate between req and wakeup commands?
@@ -7,3 +9,4 @@ doesnt matter if there is a collision, we just need to know if cards available.
 -rc522_anticollision_loop: To transmit out the select/anticollision command until all tags found
 set rc522 Coll register to keep all data so we get valid bits too
 
+-rc522_RATS: request RATS when called

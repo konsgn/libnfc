@@ -372,7 +372,7 @@ int rc522_rf_tx(struct nfc_device * pnd, const uint8_t * txData, const size_t tx
 
 	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_tx: sending %d bits (%d bytes).", txBits, txBytes);
 
-	CHK(rc522_write_reg(pnd, REG_ComIrqReg, REG_ComIrqReg_TxIRq | REG_ComIrqReg_RxIRq | REG_ComIrqReg_HiAlertIRq | REG_ComIrqReg_LoAlertIRq | REG_ComIrqReg_ErrIRq));
+	CHK(rc522_write_reg(pnd, REG_ComIrqReg, REG_ComIrqReg_TxIRq | REG_ComIrqReg_RxIRq | REG_ComIrqReg_HiAlertIRq | REG_ComIrqReg_LoAlertIRq | REG_ComIrqReg_ErrIRq | REG_ComIrqReg_TimerIRq));
 		//CHK(rc522_write_reg(pnd, REG_ComIrqReg, 0xff^REG_ComIrqReg_Set1 ));
 	CHK(rc522_write_bulk(pnd, REG_FIFODataReg, txData, transmitted));
 	
@@ -448,13 +448,13 @@ int rc522_rf_rx(struct nfc_device * pnd, uint8_t * rxData, const size_t rxMaxByt
 		//rc522_abort(pnd);
 		CHK(rc522_start_command(pnd, CMD_RECEIVE));
 	}
-	else {
-		CHK(rc522_read_reg(pnd, REG_FIFOLevelReg));
-		CHK(rc522_read_reg(pnd, REG_RxModeReg));
-		CHK(rc522_read_reg(pnd, REG_TxModeReg));
-		CHK(rc522_read_reg(pnd, REG_Status1Reg));
-		CHK(rc522_read_reg(pnd, REG_Status2Reg));
-	}
+	//else {
+		//CHK(rc522_read_reg(pnd, REG_FIFOLevelReg));
+		//CHK(rc522_read_reg(pnd, REG_RxModeReg));
+		//CHK(rc522_read_reg(pnd, REG_TxModeReg));
+		//CHK(rc522_read_reg(pnd, REG_Status1Reg));
+		//CHK(rc522_read_reg(pnd, REG_Status2Reg));
+	//}
 	while (1) {
 		if (!timeout_check(timeout)) {
 			log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_rx: transmission timeout.");
@@ -463,6 +463,12 @@ int rc522_rf_rx(struct nfc_device * pnd, uint8_t * rxData, const size_t rxMaxByt
 
 		int irqs = CHK(rc522_read_reg(pnd, REG_ComIrqReg));
 		//int errs = CHK(rc522_read_reg(pnd, REG_ErrorReg));
+
+		if (irqs & REG_ComIrqReg_TimerIRq) {
+			log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_rx: RC522 set timer_ovrflow flag.");
+			// If the RC522 detects an timeout abort the RX and notify the caller
+			return NFC_ETIMEOUT;
+		}
 
 		if (irqs & REG_ComIrqReg_ErrIRq) {
 			log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_rx: RC522 has Error");
@@ -866,15 +872,26 @@ int rc522_init(struct nfc_device * pnd) {
 	int version = CHK(rc522_read_reg(pnd, REG_VersionReg));
 	CHIP_DATA(pnd)->version = version;
 
-	CHK(rc522_write_reg(pnd, REG_TxASKReg, 0x40));
-	CHK(rc522_write_reg(pnd, REG_ModeReg, 0x29));
-	CHK(rc522_write_reg(pnd, REG_TxControlReg, 0x03));
+	//gets overridden by self-test reset- needs to be set after soft-reset
+	//CHK(rc522_write_reg(pnd, REG_TxASKReg, 0x40));
+	//CHK(rc522_write_reg(pnd, REG_ModeReg, 0x3D));
+	//CHK(rc522_write_reg(pnd, REG_TxControlReg, 0x83));
 
 	ret = rc522_self_test(pnd);
 	if (ret == NFC_EDEVNOTSUPP) {
 		// TODO: Implement another test, maybe?
 		ret = rc522_soft_reset(pnd);
 	}
+	//adding enable a global 25ms timeout in the chipset
+	CHK(rc522_write_reg(pnd, REG_TModeReg, 0x80));
+	CHK(rc522_write_reg(pnd, REG_TPrescalerReg, 0xA9));
+	CHK(rc522_write_reg(pnd, REG_TReloadRegH, 0x03));
+	CHK(rc522_write_reg(pnd, REG_TReloadRegL, 0xE8));
+	
+	
+	CHK(rc522_write_reg(pnd, REG_TxASKReg, 0x40));
+	CHK(rc522_write_reg(pnd, REG_ModeReg, 0x3D));
+	CHK(rc522_write_reg(pnd, REG_TxControlReg, 0x83));
 
 	return ret;
 }

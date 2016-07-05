@@ -154,7 +154,8 @@ typedef enum {
 #define REG_ModGsPReg	0x29
 #define REG_TModeReg	0x2A
 #define REG_TPrescalerReg	0x2B
-#define REG_TReloadReg	0x2C
+#define REG_TReloadRegH	0x2C
+#define REG_TReloadRegL	0x2D
 #define REG_TCounterValReg	0x2E
 #define REG_TestSel1Reg	0x31
 #define REG_TestSel2Reg	0x32
