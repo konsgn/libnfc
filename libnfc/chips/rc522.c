@@ -301,7 +301,7 @@ int rc522_initiator_select_passive_target(struct nfc_device *pnd,
                                       const uint8_t *pbtInitData, const size_t szInitData,
                                       nfc_target *pnt)
 {
-  return rc522_initiator_select_passive_target_ext(pnd, nm, pbtInitData, szInitData, pnt, 2000); 
+  return rc522_initiator_select_passive_target_ext(pnd, nm, pbtInitData, szInitData, pnt, 3000); 
 }
 
 int rc522_initiator_select_passive_target_ext(struct nfc_device * pnd, const nfc_modulation nm, const uint8_t * pbtInitData, const size_t szInitData, nfc_target * pnt, int timeout) {	
@@ -323,7 +323,7 @@ int rc522_initiator_select_passive_target_ext(struct nfc_device * pnd, const nfc
 
 	// TODO Verify
 	do{
-	  if ((ret = rc522_initiator_transceive_bytes(pnd, pbtInitData, szInitData, abtTargetsData, sizeof(abtTargetsData), timeout)) < 0) {
+	  if ((ret = rc522_inListPassiveTarget(pnd, pbtInitData, szInitData, pnt, timeout)) < 0) {
         if ((ret == NFC_ERFTRANS)) { // Chip timeout
           continue;
         } else
@@ -348,6 +348,92 @@ int rc522_initiator_select_passive_target_ext(struct nfc_device * pnd, const nfc
 	
 	return NFC_ENOTIMPL;
 }
+
+int 
+rc522_inListPassiveTarget(struct nfc_device *pnd,
+                          const uint8_t *pbtInitiatorData, const size_t szInitiatorData,
+                          nfc_target *pnt,
+                          int timeout)
+{
+	int ret;
+	uint8_t  Buff[15] = {0,};
+	nfc_target nttmp;
+	memset(&nttmp, 0x00, sizeof(nfc_target));
+	
+	if(szInitiatorData>4)
+		return NFC_ENOTIMPL; //TODO Implement proper cascade levels...check iso14443-subr.c  
+
+	CHK(rc522_query_a_tags(pnd, Buff, timeout));	
+	nttmp.nti.nai.abtAtqa[0]=Buff[1];
+	nttmp.nti.nai.abtAtqa[1]=Buff[0];
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "AtqA response is: 0x%02x%02x",Buff[1],Buff[0]);
+	if((Buff[0] >> 6)&0x03)return NFC_ENOTIMPL;//TODO implement read UID longer than 4
+
+	CHK(rc522_select_anticollision_loop(pnd, Buff, timeout));
+	memcpy(&(nttmp.nti.nai.abtUid),&Buff,4);
+	nttmp.nti.nai.szUidLen=4;
+	nttmp.nti.nai.btSak=Buff[5];
+
+	if(pnt) memcpy(pnt,&nttmp,sizeof(nfc_target));
+	//// Set the optional initiator data (for ISO14443A selecting a specific UID).
+	//if (pbtInitiatorData)
+	//memcpy(abtCmd + 3, pbtInitiatorData, szInitiatorData);
+	//int res = 0;
+	//if ((res = pn53x_transceive(pnd, abtCmd, 3 + szInitiatorData, pbtTargetsData, *pszTargetsData, timeout)) < 0) {
+	//return res;
+	//}
+	//*pszTargetsData = (size_t) res;
+	//return pbtTargetsData[0];
+	return NFC_SUCCESS;
+}
+
+int 
+rc522_select_anticollision_loop(struct nfc_device *pnd, uint8_t * UIDSAK, int timeout)
+{
+	int ret;
+	uint8_t Buff[5];
+	uint8_t  abtCmd[6] = {SEL,0x20,0,}; //NVB is 0x20 to select all cards
+	CHK(rc522_transceive(pnd, abtCmd, 2*8, Buff, 5, timeout)); //TODO implement anticollision & Bcc check
+	abtCmd[1]+=0x40; //adding 4 bytes of UID to select command so we can get SAK.
+	memcpy(&abtCmd[2],&Buff,4); // adding UID recieved to select command
+	CHK(rc522_transceive(pnd, abtCmd, 6*8, Buff[4], 2, timeout)); //TODO implement Sak check?
+	memcpy(&UIDSAK,&Buff,5); 
+	// implement ATS request if necessary?
+	return NFC_SUCCESS;
+}
+
+int
+rc522_query_a_tags(struct nfc_device *pnd, uint8_t * retReqa, int timeout)
+{
+	int ret;
+	uint8_t  abtCmd[1] = {REQA};
+	CHK(rc522_transceive(pnd, abtCmd, 7, retReqa, 2, timeout)); //TODO implement anticollision
+	return NFC_SUCCESS;
+}
+
+//int
+//rc522_inDeselect(struct nfc_device *pnd, const uint8_t ui8Target)
+//{
+  //if (CHIP_DATA(pnd)->type == RCS360) {
+    //// We should do act here *only* if a target was previously selected
+    //uint8_t  abtStatus[PN53x_EXTENDED_FRAME__DATA_MAX_LEN];
+    //size_t  szStatus = sizeof(abtStatus);
+    //uint8_t  abtCmdGetStatus[] = { GetGeneralStatus };
+    //int res = 0;
+    //if ((res = pn53x_transceive(pnd, abtCmdGetStatus, sizeof(abtCmdGetStatus), abtStatus, szStatus, -1)) < 0) {
+      //return res;
+    //}
+    //szStatus = (size_t) res;
+    //if ((szStatus < 3) || (abtStatus[2] == 0)) {
+      //return NFC_SUCCESS;
+    //}
+    //// No much choice what to deselect actually...
+    //uint8_t  abtCmdRcs360[] = { InDeselect, 0x01, 0x01 };
+    //return (pn53x_transceive(pnd, abtCmdRcs360, sizeof(abtCmdRcs360), NULL, 0, -1));
+  //}
+  //uint8_t  abtCmd[] = { InDeselect, ui8Target };
+  //return (pn53x_transceive(pnd, abtCmd, sizeof(abtCmd), NULL, 0, -1));
+//}
 
 void rc522_timeout_init(struct nfc_device * pnd, timeout_t * to, int timeout) {
 	if (timeout == TIMEOUT_NEVER) {
@@ -448,13 +534,16 @@ int rc522_rf_rx(struct nfc_device * pnd, uint8_t * rxData, const size_t rxMaxByt
 		//rc522_abort(pnd);
 		CHK(rc522_start_command(pnd, CMD_RECEIVE));
 	}
-	//else {
+	else {
+		//// Clear all irq's except recieve
+		//CHK(rc522_write_reg(pnd, REG_ComIrqReg, 0x7f^REG_ComIrqReg_RxIRq));
+		
 		//CHK(rc522_read_reg(pnd, REG_FIFOLevelReg));
 		//CHK(rc522_read_reg(pnd, REG_RxModeReg));
 		//CHK(rc522_read_reg(pnd, REG_TxModeReg));
 		//CHK(rc522_read_reg(pnd, REG_Status1Reg));
 		//CHK(rc522_read_reg(pnd, REG_Status2Reg));
-	//}
+	}
 	while (1) {
 		if (!timeout_check(timeout)) {
 			log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_rx: transmission timeout.");
