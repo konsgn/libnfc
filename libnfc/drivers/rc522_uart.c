@@ -95,6 +95,12 @@ bool rc522_uart_test_baudrate(struct nfc_device * pnd, uint32_t baudrate) {
 	}*/
 	uart_set_speed(DRIVER_DATA(pnd)->port, baudrate);
 
+	//test if the chip talks at whatever baud first before trying to init
+	if (rc522_wait_wakeup(pnd)<0) {
+		uart_flush_input(DRIVER_DATA(pnd)->port, true); //make sure to flush if failed
+		return false;
+	}
+
 	// Attempt to test and initialize the device
 	if (rc522_init(pnd) != NFC_SUCCESS) {
 		return false;
@@ -163,6 +169,7 @@ int rc522_uart_create(const nfc_context * context, const nfc_connstring connstri
 	if (
 			!rc522_uart_test_baudrate(pnd, BOOT_BAUD_RATE) &&
 			!rc522_uart_test_baudrate(pnd, userBaudRate)
+			
 	) {
 		log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Could not connect with RC522 at %d or %d bps.", BOOT_BAUD_RATE, userBaudRate);
 		rc522_uart_close(pnd);
@@ -260,7 +267,7 @@ uint8_t rc522_uart_pack(int reg, int op) {
 int rc522_uart_read(struct nfc_device * pnd, uint8_t reg, uint8_t * data, size_t size) {
 	uint8_t cmd = rc522_uart_pack(reg, READ);
 	int ret;
-
+	
 	while (size > 0) {
 		if ((ret = uart_send(DRIVER_DATA(pnd)->port, &cmd, 1, IO_TIMEOUT)) < 0) {
 			goto error;

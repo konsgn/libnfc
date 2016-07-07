@@ -339,14 +339,19 @@ int rc522_initiator_select_passive_target_ext(struct nfc_device * pnd, const nfc
 		//}
 	}while (pnd->bInfiniteSelect);
 
-	 if ((ret = rc522_initiator_transceive_bytes(pnd, pbtInitData, szInitData, abtTargetsData, sizeof(abtTargetsData), timeout)) < 0) {
-		if ((ret == NFC_ERFTRANS)) { // Chip timeout
-		  return NFC_ENOTIMPL;
-		} else
-		  return ret;
-	  }
+	 //if ((ret = rc522_initiator_transceive_bytes(pnd, pbtInitData, szInitData, abtTargetsData, sizeof(abtTargetsData), timeout)) < 0) {
+		//if ((ret == NFC_ERFTRANS)) { // Chip timeout
+		  //return NFC_ENOTIMPL;
+		//} else
+		  //return ret;
+	  //}
 	
-	return NFC_ENOTIMPL;
+	if ((ret == NFC_SUCCESS)) {
+		nttmp.nm = nm;
+		memcpy(&(pnt->nm),&(nttmp.nm),sizeof(nfc_modulation));
+		return 1;
+	}
+	return 0;
 }
 
 int 
@@ -363,16 +368,16 @@ rc522_inListPassiveTarget(struct nfc_device *pnd,
 	if(szInitiatorData>4)
 		return NFC_ENOTIMPL; //TODO Implement proper cascade levels...check iso14443-subr.c  
 
-	CHK(rc522_query_a_tags(pnd, Buff, timeout));	
+	CHK(rc522_query_a_tags(pnd, &Buff, timeout));	
 	nttmp.nti.nai.abtAtqa[0]=Buff[1];
 	nttmp.nti.nai.abtAtqa[1]=Buff[0];
 	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "AtqA response is: 0x%02x%02x",Buff[1],Buff[0]);
 	if((Buff[0] >> 6)&0x03)return NFC_ENOTIMPL;//TODO implement read UID longer than 4
 
-	CHK(rc522_select_anticollision_loop(pnd, Buff, timeout));
+	CHK(rc522_select_anticollision_loop(pnd, &Buff, timeout));
 	memcpy(&(nttmp.nti.nai.abtUid),&Buff,4);
 	nttmp.nti.nai.szUidLen=4;
-	nttmp.nti.nai.btSak=Buff[5];
+	nttmp.nti.nai.btSak=Buff[4];
 
 	if(pnt) memcpy(pnt,&nttmp,sizeof(nfc_target));
 	//// Set the optional initiator data (for ISO14443A selecting a specific UID).
@@ -391,13 +396,13 @@ int
 rc522_select_anticollision_loop(struct nfc_device *pnd, uint8_t * UIDSAK, int timeout)
 {
 	int ret;
-	uint8_t Buff[5];
-	uint8_t  abtCmd[6] = {SEL,0x20,0,}; //NVB is 0x20 to select all cards
-	CHK(rc522_transceive(pnd, abtCmd, 2*8, Buff, 5, timeout)); //TODO implement anticollision & Bcc check
+	uint8_t Buff[6];
+	uint8_t  abtCmd[7] = {SEL,0x20,0,}; //NVB is 0x20 to select all cards
+	CHK(rc522_transceive(pnd, abtCmd, 2*8, &Buff, 5, timeout)); //TODO implement anticollision & Bcc check
 	abtCmd[1]+=0x40; //adding 4 bytes of UID to select command so we can get SAK.
 	memcpy(&abtCmd[2],&Buff,4); // adding UID recieved to select command
-	CHK(rc522_transceive(pnd, abtCmd, 6*8, Buff[4], 2, timeout)); //TODO implement Sak check?
-	memcpy(&UIDSAK,&Buff,5); 
+	CHK(rc522_transceive(pnd, abtCmd, 6*8, &(Buff[4]), 2, timeout)); //TODO implement Sak check?
+	memcpy(UIDSAK,&Buff,5); 
 	// implement ATS request if necessary?
 	return NFC_SUCCESS;
 }
