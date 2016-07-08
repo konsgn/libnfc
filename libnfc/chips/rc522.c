@@ -39,6 +39,8 @@
 #define TIMEOUT_DEFAULT 50
 #define TIMEOUT_NEVER 0
 
+//#define Mask_Timeout 1
+
 const nfc_modulation_type rc522_initiator_modulation[] = { NMT_ISO14443A, 0 };
 const nfc_modulation_type rc522_target_modulation[] = { 0 };
 
@@ -396,12 +398,15 @@ int
 rc522_select_anticollision_loop(struct nfc_device *pnd, uint8_t * UIDSAK, int timeout)
 {
 	int ret;
-	uint8_t Buff[6];
-	uint8_t  abtCmd[7] = {SEL,0x20,0,}; //NVB is 0x20 to select all cards
+	uint8_t Buff[8]; // allocate enough room for 4 byte uuid and 3 byte sak response.
+	uint8_t  abtCmd[10] = {SEL,0x20,0,}; //NVB is 0x20 to select all cards
+	
 	CHK(rc522_transceive(pnd, abtCmd, 2*8, &Buff, 5, timeout)); //TODO implement anticollision & Bcc check
-	abtCmd[1]+=0x40; //adding 4 bytes of UID to select command so we can get SAK.
-	memcpy(&abtCmd[2],&Buff,4); // adding UID recieved to select command
-	CHK(rc522_transceive(pnd, abtCmd, 6*8, &(Buff[4]), 2, timeout)); //TODO implement Sak check?
+	//abtCmd[1]+=0x40; //adding 4 bytes of UID to select command so we can get SAK.
+	abtCmd[1]=0x70; //tx nvb to specify full UID to select command so we can get SAK.
+	memcpy(&abtCmd[2],&Buff,5); // adding UID & bcc recieved to select command
+	iso14443a_crc_append(abtCmd, 7);
+	CHK(rc522_transceive(pnd, abtCmd, 9*8, &(Buff[4]), 3, timeout)); //TODO implement Sak check?
 	memcpy(UIDSAK,&Buff,5); 
 	// implement ATS request if necessary?
 	return NFC_SUCCESS;
@@ -557,13 +562,15 @@ int rc522_rf_rx(struct nfc_device * pnd, uint8_t * rxData, const size_t rxMaxByt
 
 		int irqs = CHK(rc522_read_reg(pnd, REG_ComIrqReg));
 		//int errs = CHK(rc522_read_reg(pnd, REG_ErrorReg));
-
+	
+		#ifndef Mask_Timeout  
 		if (irqs & REG_ComIrqReg_TimerIRq) {
 			log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_rx: RC522 set timer_ovrflow flag.");
 			// If the RC522 detects an timeout abort the RX and notify the caller
 			return NFC_ETIMEOUT;
 		}
-
+		#endif
+		
 		if (irqs & REG_ComIrqReg_ErrIRq) {
 			log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_rx: RC522 has Error");
 			int errs = CHK(rc522_read_reg(pnd, REG_ErrorReg));
