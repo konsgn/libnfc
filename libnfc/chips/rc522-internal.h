@@ -40,6 +40,18 @@ typedef enum {
 #define SEL2 0x95 
 #define SEL3 0x97 
 
+//Adding definitions to know when to turn on/off crc to properly emulate easy-framing.
+//Mifare Classic commands
+#define  MC_AUTH_A 0x60
+#define  MC_AUTH_B 0x61
+#define  MC_READ 0x30
+#define  MC_WRITE 0xA0
+#define  MC_TRANSFER 0xB0
+#define  MC_DECREMENT 0xC0
+#define  MC_INCREMENT 0xC1
+#define  MC_STORE 0xC2
+static const uint8_t MC_CMD_LIST[2] = {0x60,0x61};//,0x30,0xA0,0xB0,0xC0,0xC1,0xC2};
+
 //14443A usefull bit masks:
 //Don't use ATQA, it is liable to have collisions, just detect if tag exists here.
 #define ATQA_UID_sz_UNPACK(x) ((x>>6) & 3)

@@ -366,6 +366,10 @@ rc522_inListPassiveTarget(struct nfc_device *pnd,
 	uint8_t  Buff[15] = {0,};
 	nfc_target nttmp;
 	memset(&nttmp, 0x00, sizeof(nfc_target));
+	bool be_easy =0;
+	
+	be_easy = pnd->bEasyFraming;
+	pnd->bEasyFraming =0;
 	
 	if(szInitiatorData>4)
 		return NFC_ENOTIMPL; //TODO Implement proper cascade levels...check iso14443-subr.c  
@@ -380,6 +384,8 @@ rc522_inListPassiveTarget(struct nfc_device *pnd,
 	memcpy(&(nttmp.nti.nai.abtUid),&Buff,4);
 	nttmp.nti.nai.szUidLen=4;
 	nttmp.nti.nai.btSak=Buff[4];
+
+	pnd->bEasyFraming =be_easy;
 
 	if(pnt) memcpy(pnt,&nttmp,sizeof(nfc_target));
 	//// Set the optional initiator data (for ISO14443A selecting a specific UID).
@@ -464,7 +470,24 @@ void rc522_timeout_init(struct nfc_device * pnd, timeout_t * to, int timeout) {
 int rc522_rf_tx(struct nfc_device * pnd, const uint8_t * txData, const size_t txBits, timeout_t * timeout, bool transceive) {
 	size_t txBytes = BITS2BYTES(txBits);
 	size_t transmitted = MIN(txBytes, FIFO_SIZE);
+	uint8_t txdatawcrc[FIFO_SIZE];
 	int ret;
+
+	if((pnd->bEasyFraming)&&(txBits%8==0)) { //if easyframing is on and tx is of byte size, append crc
+		bool exit =0;
+		log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_tx: is easy?: %02x", *txData );
+		for (int i=0;i < sizeof(MC_CMD_LIST);i++){
+			if(*txData==MC_CMD_LIST[i]) {exit=1;break;}
+		}
+		if(!exit){
+			memcpy(&txdatawcrc,txData,txBytes);
+			iso14443a_crc_append(&txdatawcrc,txBytes);
+			txData=&txdatawcrc;
+			txBytes+=2;
+			transmitted = MIN(txBytes, FIFO_SIZE);
+			log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_tx: is easy!: %d", transmitted );
+		}
+	}
 
 	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_tx: sending %d bits (%d bytes).", txBits, txBytes);
 
@@ -619,14 +642,15 @@ int rc522_rf_rx(struct nfc_device * pnd, uint8_t * rxData, const size_t rxMaxByt
 
 int rc522_transceive(struct nfc_device * pnd, const uint8_t * txData, const size_t txBits, uint8_t * rxData, const size_t rxMaxBytes, int timeout) {
 	int ret;
-
+	uint8_t txdatawcrc [64] = {0,};
 	bool doTX = ((txData != NULL) && txBits > 0);
 	bool doRX = ((rxData != NULL) );
 	bool isTransceive = doTX && doRX;
-
-	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_transceive: is doTX: %d", doTX);
+	
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_transceive: is doTX: %d", txBits);
 	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_transceive: is rxData,max: %d:%d", rxData,rxMaxBytes);
 	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_transceive: is transcieve: %d", isTransceive);
+	
 	CHK(rc522_abort(pnd));
 
 	timeout_t to;
