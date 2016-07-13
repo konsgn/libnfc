@@ -20,3 +20,8 @@ select should scan WUPA(wakeup all and check). If no data given, otherwise selec
 
 bah! Now needing to add definitions for various commands to properly emulate easy framing.
 starting with mifare commands, and the disabling of crc for those specific commands.
+Double Bah! it seems mifare communication of authentication commands happens in more than one exchange,
+easy_framing for the pn53x seems to hide all that from the examples. this is going to be harder than expected.
+Less Bah! it seems rc522 can also do authentication/ crypto enable for mifare.. Woo!
+
+... Perhaps it is time to completely redesign the rc522.c code.

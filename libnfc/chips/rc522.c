@@ -467,26 +467,97 @@ void rc522_timeout_init(struct nfc_device * pnd, timeout_t * to, int timeout) {
 	}
 }
 
+
+int rc522_rf_low_level_trx(struct nfc_device * pnd, rc522_cmd cmd, 
+							uint8_t waitIRq, 
+							const uint8_t * txData, const size_t txBits, 
+							uint8_t * rxData, const size_t rxMaxBytes, 
+							uint8_t *validBits, 
+							int timeout){
+	size_t txBytes = BITS2BYTES(txBits);
+	size_t transmitted = MIN(txBytes, FIFO_SIZE);
+	uint8_t txdatawcrc[FIFO_SIZE];
+	bool Authenticate_cmd=0;
+	int ret;
+		
+	// Can we really feed data fast enough to prevent a underflow? toss an error for now
+	if(txBytes>FIFO_SIZE) return NFC_ENOTIMPL;
+	
+	CHK(rc522_abort()); //idle and flush
+	CHK(rc522_write_reg(pnd, REG_ComIrqReg, ~REG_ComIrqReg_Set1)); //clear all IRq's
+	CHK(rc522_write_bulk(pnd, REG_FIFODataReg, txData, transmitted));
+	CHK(rc522_write_reg(pnd, REG_BitFramingReg, REG_BitFramingReg_RxAlign_PACK(0) | REG_BitFramingReg_TxLastBits_PACK(txBits)));
+	CHK(rc522_start_command(pnd, cmd));
+	if(cmd==CMD_TRANSCEIVE) CHK(rc522_write_reg_mask(pnd, REG_BitFramingReg, REG_BitFramingReg_StartSend, 0x80));
+	
+	while (1) {
+		if (!timeout_check(timeout)) {
+			log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_tx: transmission timeout.");
+			return NFC_ETIMEOUT;
+		}
+		int irqs = CHK(rc522_read_reg(pnd, REG_ComIrqReg));
+		
+		#ifndef Mask_Timeout  
+		if (irqs & REG_ComIrqReg_TimerIRq) {
+			log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_rx: RC522 set timer_ovrflow flag.");
+			// If the RC522 detects an timeout abort the RX and notify the caller
+			return NFC_ETIMEOUT;
+		}
+		#endif
+		
+		if(irqs & waitIRq)
+			break;
+		
+		//if (irqs & REG_ComIrqReg_ErrIRq) {
+			//log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_tx: RC522 set ErrIRq flag.");
+			//// If the RC522 detects an error abort the transmission and notify the caller
+			//return NFC_ECHIP;
+		//}
+	}
+	
+	//Break out if any error other than collision.
+	if((irqs & REG_ComIrqReg_ErrIRq)&&(CHK(rc522_read_reg(pnd, REG_ComIrqReg_ErrIRq))&0x13)) return NFC_ECHIP;
+	
+	if(rxMaxBytes){
+		CHK(rc522_read_reg(pnd, REG_FIFOLevelReg));
+		CHK(rc522_read_bulk(pnd, REG_FIFODataReg, rxData , MIN(ret,rxMaxBytes)));
+		if(validBits) *validBits=CHK(rc522_read_reg(pnd, REG_ControlReg))& 0x07;
+	}
+	
+	if(rxMaxBytes&&(pnd->bCrc)){ //Do CRC check if enabled.
+		
+		return NFC_ERFTRANS;
+	}
+	
+}
+
 int rc522_rf_tx(struct nfc_device * pnd, const uint8_t * txData, const size_t txBits, timeout_t * timeout, bool transceive) {
 	size_t txBytes = BITS2BYTES(txBits);
 	size_t transmitted = MIN(txBytes, FIFO_SIZE);
 	uint8_t txdatawcrc[FIFO_SIZE];
+	bool Authenticate_cmd=0;
 	int ret;
+	
+	// Can we really feed data fast enough to prevent a underflow? toss an error
+	if(txBytes>FIFO_SIZE) return NFC_ENOTIMPL;
 
 	if((pnd->bEasyFraming)&&(txBits%8==0)) { //if easyframing is on and tx is of byte size, append crc
-		bool exit =0;
-		log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_tx: is easy?: %02x", *txData );
-		for (int i=0;i < sizeof(MC_CMD_LIST);i++){
-			if(*txData==MC_CMD_LIST[i]) {exit=1;break;}
+		for (int i=0;i < sizeof(MC_AUTHCMD_LIST);i++){
+			if(*txData==MC_AUTHCMD_LIST[i]) {Authenticate_cmd=1;break;}
 		}
-		if(!exit){
-			memcpy(&txdatawcrc,txData,txBytes);
-			iso14443a_crc_append(&txdatawcrc,txBytes);
-			txData=&txdatawcrc;
-			txBytes+=2;
-			transmitted = MIN(txBytes, FIFO_SIZE);
-			log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_tx: is easy!: %d", transmitted );
-		}
+		//bool exit =0;
+		//log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_tx: is easy?: %02x", *txData );
+		//for (int i=0;i < sizeof(MC_CMD_LIST);i++){
+			//if(*txData==MC_CMD_LIST[i]) {exit=1;break;}
+		//}
+		//if(!exit){
+			//memcpy(&txdatawcrc,txData,txBytes);
+			//iso14443a_crc_append(&txdatawcrc,txBytes);
+			//txData=&txdatawcrc;
+			//txBytes+=2;
+			//transmitted = MIN(txBytes, FIFO_SIZE);
+			//log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_tx: is easy!: %d", transmitted );
+		//}
 	}
 
 	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_tx: sending %d bits (%d bytes).", txBits, txBytes);
@@ -497,13 +568,13 @@ int rc522_rf_tx(struct nfc_device * pnd, const uint8_t * txData, const size_t tx
 	
 	//set bit count before starting tx
 	CHK(rc522_write_reg(pnd, REG_BitFramingReg, REG_BitFramingReg_RxAlign_PACK(0) | REG_BitFramingReg_TxLastBits_PACK(txBits)));
-	if (transceive) {
+	if (Authenticate_cmd) {CHK(rc522_start_command(pnd, CMD_MFAUTHENT));}
+	else if (transceive) {
 		// If transceiving we must first start the command and then configure framing and start transmission
 		CHK(rc522_start_command(pnd, CMD_TRANSCEIVE));
 		CHK(rc522_write_reg(pnd, REG_BitFramingReg, REG_BitFramingReg_StartSend | REG_BitFramingReg_RxAlign_PACK(0) | REG_BitFramingReg_TxLastBits_PACK(txBits)));
 	} else {
 		// If only transmitting we must configure framing and then start the transmission
-		CHK(rc522_write_reg(pnd, REG_BitFramingReg, REG_BitFramingReg_RxAlign_PACK(0) | REG_BitFramingReg_TxLastBits_PACK(txBits)));
 		CHK(rc522_start_command(pnd, CMD_TRANSMIT));
 	}
 
@@ -688,6 +759,8 @@ int rc522_initiator_transceive_bytes(struct nfc_device * pnd, const uint8_t * tx
 	#ifdef func_DEBUG 
 	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_initiator_transceive_bytes");
 	#endif
+	
+	//TODO Handle inputs translate to 
 	return rc522_transceive(pnd, txData, txSize * 8, rxData, rxMaxBytes, timeout);
 }
 

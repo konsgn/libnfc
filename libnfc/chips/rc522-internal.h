@@ -50,7 +50,7 @@ typedef enum {
 #define  MC_DECREMENT 0xC0
 #define  MC_INCREMENT 0xC1
 #define  MC_STORE 0xC2
-static const uint8_t MC_CMD_LIST[2] = {0x60,0x61};//,0x30,0xA0,0xB0,0xC0,0xC1,0xC2};
+static const uint8_t MC_AUTHCMD_LIST[2] = {0x60,0x61};//,0x30,0xA0,0xB0,0xC0,0xC1,0xC2};
 
 //14443A usefull bit masks:
 //Don't use ATQA, it is liable to have collisions, just detect if tag exists here.
