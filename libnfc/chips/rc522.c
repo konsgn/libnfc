@@ -423,7 +423,7 @@ rc522_query_a_tags(struct nfc_device *pnd, uint8_t * retReqa, int timeout)
 {
 	int ret;
 	uint8_t  abtCmd[1] = {REQA};
-	CHK(rc522_transceive(pnd, abtCmd, 7, retReqa, 2, timeout)); //TODO implement anticollision
+	CHK(rc522_transceive_new(pnd, abtCmd, 7, retReqa, 2, timeout)); //TODO implement anticollision
 	return NFC_SUCCESS;
 }
 
@@ -526,7 +526,7 @@ int rc522_rf_low_level_trx(struct nfc_device * pnd, rc522_cmd cmd,
 		rxdbytes=ret;
 		CHK(rc522_read_bulk(pnd, REG_FIFODataReg, rxData , MIN(ret,rxMaxBytes)));
 		if(validBits) {
-			C522_read_reg(pnd, REG_ControlReg);
+			CHK(rc522_read_reg(pnd, REG_ControlReg));
 			*validBits=ret&0x07;
 		}
 	}
