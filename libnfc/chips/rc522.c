@@ -52,6 +52,13 @@ struct rc522_chip_data {
 	int default_timeout;
 };
 
+//Function protocols
+int rc522_rf_low_level_trx(struct nfc_device * pnd, rc522_cmd cmd, 
+							uint8_t waitIRq, 
+							const uint8_t * txData, const size_t txBits, 
+							uint8_t * rxData, const size_t rxMaxBytes, 
+							uint8_t *validBits, 
+							int timeout);
 
 int rc522_data_new(struct nfc_device * pnd, const struct rc522_io * io) {
 	pnd->chip_data = malloc(sizeof(struct rc522_chip_data));
@@ -401,6 +408,24 @@ rc522_inListPassiveTarget(struct nfc_device *pnd,
 }
 
 int 
+rc522_select_anticollision_loop_new(struct nfc_device *pnd, nfc_target *pnt, int timeout)
+{
+	int ret;
+	uint8_t Buff[100]; // allocate enough room for 100 bytes of ATS? why not, I haven't seen longer than ~13
+	uint8_t  abtCmd[10] = {SEL,0x20,0,}; //NVB is 0x20 to select all cards
+	
+	CHK(rc522_rf_low_level_trx(pnd, CMD_TRANSCEIVE,0x30, abtCmd, 2*8, &Buff, 5,NULL, timeout)); //TODO implement anticollision & Bcc check
+	//abtCmd[1]+=0x40; //adding 4 bytes of UID to select command so we can get SAK.
+	abtCmd[1]=0x70; //tx nvb to specify full UID to select command so we can get SAK.
+	memcpy(&abtCmd[2],&Buff,5); // adding UID & bcc recieved to select command
+	iso14443a_crc_append(abtCmd, 7);
+	CHK(rc522_transceive(pnd, abtCmd, 9*8, &(Buff[4]), 3, timeout)); //TODO implement Sak check?
+	memcpy(pnt,&Buff,5); 
+	// implement ATS request if necessary?
+	return NFC_SUCCESS;
+}
+
+int 
 rc522_select_anticollision_loop(struct nfc_device *pnd, uint8_t * UIDSAK, int timeout)
 {
 	int ret;
@@ -481,6 +506,8 @@ int rc522_rf_low_level_trx(struct nfc_device * pnd, rc522_cmd cmd,
 	uint8_t irqs=0;
 	bool Authenticate_cmd=0;
 	int ret;
+	timeout_t to;
+	rc522_timeout_init(pnd, &to, timeout);	
 		
 	// Can we really feed data fast enough to prevent a underflow? toss an error for now
 	if(txBytes>FIFO_SIZE) return NFC_ENOTIMPL;
@@ -493,11 +520,11 @@ int rc522_rf_low_level_trx(struct nfc_device * pnd, rc522_cmd cmd,
 	if(cmd==CMD_TRANSCEIVE) CHK(rc522_write_reg_mask(pnd, REG_BitFramingReg, REG_BitFramingReg_StartSend, 0x80));
 	
 	while (1) {
-		if (!timeout_check(timeout)) {
+		if (!timeout_check(&to)) {
 			log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "rc522_rf_tx: transmission timeout.");
 			return NFC_ETIMEOUT;
 		}
-		irqs = CHK(rc522_read_reg(pnd, REG_ComIrqReg));
+		irqs = CHK(rc522_read_reg(pnd, REG_ComIrqReg)); 
 		
 		#ifndef Mask_Timeout  
 		if (irqs & REG_ComIrqReg_TimerIRq) {
