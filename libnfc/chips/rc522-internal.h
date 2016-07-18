@@ -39,6 +39,9 @@ typedef enum {
 #define SEL  0x93 
 #define SEL2 0x95 
 #define SEL3 0x97 
+//SAK Response usefull bits
+#define SAK_UID_NCMPLT				(1 << 2) 
+#define SAK_ISO14443_4_COMPLIANT	(1 << 5)
 
 //Adding definitions to know when to turn on/off crc to properly emulate easy-framing.
 //Mifare Classic commands

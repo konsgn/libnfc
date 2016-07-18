@@ -378,21 +378,21 @@ rc522_inListPassiveTarget(struct nfc_device *pnd,
 	be_easy = pnd->bEasyFraming;
 	pnd->bEasyFraming =0;
 	
-	if(szInitiatorData>4)
-		return NFC_ENOTIMPL; //TODO Implement proper cascade levels...check iso14443-subr.c  
+	//if(szInitiatorData>4)
+		//return NFC_ENOTIMPL; //TODO Implement proper cascade levels...check iso14443-subr.c  
 
 	CHK(rc522_query_a_tags(pnd, &Buff, timeout));	
 	nttmp.nti.nai.abtAtqa[0]=Buff[1];
 	nttmp.nti.nai.abtAtqa[1]=Buff[0];
 	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "AtqA response is: 0x%02x%02x",Buff[1],Buff[0]);
-	if((Buff[0] >> 6)&0x03)return NFC_ENOTIMPL;//TODO implement read UID longer than 4
+	//if((Buff[0] >> 6)&0x03)return NFC_ENOTIMPL;//TODO implement read UID longer than 4
 
-	CHK(rc522_select_anticollision_loop(pnd, &Buff, timeout));
-	memcpy(&(nttmp.nti.nai.abtUid),&Buff,4);
-	nttmp.nti.nai.szUidLen=4;
-	nttmp.nti.nai.btSak=Buff[4];
+	CHK(rc522_select_anticollision_loop_new(pnd,pbtInitiatorData,szInitiatorData,nttmp, timeout));
+	//memcpy(&(nttmp.nti.nai.abtUid),&Buff,4);
+	//nttmp.nti.nai.szUidLen=4;
+	//nttmp.nti.nai.btSak=Buff[4];
 
-	pnd->bEasyFraming =be_easy;
+	pnd->bEasyFraming = be_easy;
 
 	if(pnt) memcpy(pnt,&nttmp,sizeof(nfc_target));
 	//// Set the optional initiator data (for ISO14443A selecting a specific UID).
@@ -407,21 +407,105 @@ rc522_inListPassiveTarget(struct nfc_device *pnd,
 	return NFC_SUCCESS;
 }
 
+uint8_t 
+rc522_calc_bcc(uint8_t *InData){//uint8_t *OutData,size_t szLen){
+	uint8_t  bcc   =0;
+	uint8_t  szLen =4;
+	do {
+    bcc ^= *InData++;
+    //log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "countup D=0x%02X",bcc);
+  } while (--szLen);
+  return bcc;
+}
+
 int 
-rc522_select_anticollision_loop_new(struct nfc_device *pnd, nfc_target *pnt, int timeout)
+rc522_select_anticollision_loop_new(struct nfc_device *pnd, 
+									const uint8_t *pbtInitiatorData, const size_t szInitiatorData,
+									nfc_target *pnt, int timeout)
 {
 	int ret;
+	bool SelDone = 0;
+	bool getRats = 0;
 	uint8_t Buff[100]; // allocate enough room for 100 bytes of ATS? why not, I haven't seen longer than ~13
-	uint8_t  abtCmd[10] = {SEL,0x20,0,}; //NVB is 0x20 to select all cards
+	uint8_t  abtCmd[15] = {0,}; //NVB is 0x20 to select all cards
+	uint8_t cuid[3][4]={{0,},{0,},{0,}}; 
+	size_t szTxData;
+	uint8_t cascade_level = 0;
 	
-	CHK(rc522_rf_low_level_trx(pnd, CMD_TRANSCEIVE,0x30, abtCmd, 2*8, &Buff, 5,NULL, timeout)); //TODO implement anticollision & Bcc check
-	//abtCmd[1]+=0x40; //adding 4 bytes of UID to select command so we can get SAK.
-	abtCmd[1]=0x70; //tx nvb to specify full UID to select command so we can get SAK.
-	memcpy(&abtCmd[2],&Buff,5); // adding UID & bcc recieved to select command
-	iso14443a_crc_append(abtCmd, 7);
-	CHK(rc522_transceive(pnd, abtCmd, 9*8, &(Buff[4]), 3, timeout)); //TODO implement Sak check?
-	memcpy(pnt,&Buff,5); 
-	// implement ATS request if necessary?
+	if(szInitiatorData){
+		iso14443_cascade_uid(pbtInitiatorData,szInitiatorData,&abtCmd+2,&szTxData);
+		//memcpy(&cuid[0][0],&abtCmd+2,4);
+		//if(szInitiatorData>4)memcpy(&cuid[1][0],&abtCmd+6,4);
+		//if(szInitiatorData>7)memcpy(&cuid[2][0],&abtCmd+10,4);
+		memcpy(&cuid[0][0],&abtCmd+2,szTxData); //Can we just do this?
+	}
+	//TODO implement anti-collision
+	do{
+		if(szInitiatorData){
+			abtCmd[0]=SEL+(2*cascade_level);
+			abtCmd[1]=0x70;
+			memcpy(&abtCmd[2],&cuid[cascade_level][0],4);
+			abtCmd[6]=rc522_calc_bcc(&abtCmd[2]);
+			iso14443a_crc_append(&abtCmd, 7);
+			CHK(rc522_rf_low_level_trx(pnd, CMD_TRANSCEIVE,0x30, abtCmd, 9*8, &Buff, 5,NULL, timeout));
+			iso14443a_crc(&Buff,1,&Buff[3]);
+			if(memcmp(&Buff+1,&Buff[3],2)!=0)return NFC_ERFTRANS;
+			if((Buff[0]&SAK_UID_NCMPLT))cascade_level++;
+			else{
+				if(Buff[0]&SAK_ISO14443_4_COMPLIANT)getRats=1;
+				SelDone=1;
+			}
+		}
+		else {
+			abtCmd[0]=SEL+(2*cascade_level);
+			abtCmd[1]=0x20;
+			CHK(rc522_rf_low_level_trx(pnd, CMD_TRANSCEIVE,0x30, abtCmd, 2*8, &Buff, 5,NULL, timeout));
+			//rc522_calc_bcc(&Buff); //check Bcc
+log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL response is: 0x%02x,%02x,%02x,%02x,%02x,%02x",Buff[0],Buff[1],Buff[2],Buff[3],Buff[4],rc522_calc_bcc(&Buff));
+			if(Buff[4]!=rc522_calc_bcc(&Buff))return NFC_ERFTRANS; 
+			memcpy(&abtCmd[2],&Buff,5); // adding UID & bcc recieved to select command and to uid storage buff
+			memcpy(&cuid[cascade_level][0],&Buff,4); 
+			abtCmd[1]=0x70; //tx nvb to specify full UID to select command so we can get SAK.
+			iso14443a_crc_append(&abtCmd, 7);
+			CHK(rc522_rf_low_level_trx(pnd, CMD_TRANSCEIVE,0x30, abtCmd, 9*8, &Buff, 5,NULL, timeout));
+			iso14443a_crc(&Buff,1,&Buff[3]);
+log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL response is: 0x%02x,%02x,%02x,%02x,%02x",Buff[0],Buff[1],Buff[2],Buff[3],Buff[4]);
+			//if(memcmp(&Buff+1,&Buff[3],2)!=0)return NFC_ERFTRANS;
+			if((Buff[1]!=Buff[3])||(Buff[2]!=Buff[4]))return NFC_ERFTRANS;
+			if((Buff[0]&SAK_UID_NCMPLT))cascade_level++;
+			else{
+				if(Buff[0]&SAK_ISO14443_4_COMPLIANT)getRats=1;
+				SelDone=1;
+			}
+		}
+	} while(!SelDone);
+log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL Done");
+	if(cascade_level==0){
+		log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL Done");
+		memcpy(pnt->nti.nai.abtUid,&cuid[0][0],4); 
+		pnt->nti.nai.szUidLen = 4;
+		log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL Done");
+	}
+	if(cascade_level==1){
+		memcpy(pnt->nti.nai.abtUid,&cuid[0][1],3);
+		memcpy(pnt->nti.nai.abtUid,&cuid[1][0],4);
+		pnt->nti.nai.szUidLen = 7;
+	}
+	if(cascade_level==2){
+		memcpy(pnt->nti.nai.abtUid,&cuid[0][1],3);
+		memcpy(pnt->nti.nai.abtUid,&cuid[1][1],3);
+		memcpy(pnt->nti.nai.abtUid,&cuid[2][0],4);
+		pnt->nti.nai.szUidLen = 10;
+	}	
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL Done");
+	pnt->nti.nai.btSak=Buff[0]; 
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL Done");
+	//TODO implement RATS
+	//if(getRats){
+		
+	//}
+	
+	
 	return NFC_SUCCESS;
 }
 
