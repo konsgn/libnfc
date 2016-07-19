@@ -426,7 +426,7 @@ rc522_select_anticollision_loop_new(struct nfc_device *rcd,
 	int ret;
 	bool SelDone = 0;
 	bool getRats = 0;
-	uint8_t Buff[100]; // allocate enough room for 100 bytes of ATS? why not, I haven't seen longer than ~13
+	uint8_t Buff[100]; // allocate enough room for 100 bytes of RATS? why not, I haven't seen longer than ~13
 	uint8_t  abtCmd[15] = {0,}; //NVB is 0x20 to select all cards
 	uint8_t cuid[3][4]={{0,},{0,},{0,}}; 
 	size_t szTxData;
@@ -461,7 +461,7 @@ rc522_select_anticollision_loop_new(struct nfc_device *rcd,
 			abtCmd[1]=0x20;
 			CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSCEIVE,0x30, abtCmd, 2*8, &Buff, 5,NULL, timeout));
 			//rc522_calc_bcc(&Buff); //check Bcc
-log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL response is: 0x%02x,%02x,%02x,%02x,%02x,%02x",Buff[0],Buff[1],Buff[2],Buff[3],Buff[4],rc522_calc_bcc(&Buff));
+//log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL response is: 0x%02x,%02x,%02x,%02x,%02x,%02x",Buff[0],Buff[1],Buff[2],Buff[3],Buff[4],rc522_calc_bcc(&Buff));
 			if(Buff[4]!=rc522_calc_bcc(&Buff))return NFC_ERFTRANS; 
 			memcpy(&abtCmd[2],&Buff,5); // adding UID & bcc recieved to select command and to uid storage buff
 			memcpy(&cuid[cascade_level][0],&Buff,4); 
@@ -469,7 +469,7 @@ log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL response is: 0x%02
 			iso14443a_crc_append(&abtCmd, 7);
 			CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSCEIVE,0x30, abtCmd, 9*8, &Buff, 5,NULL, timeout));
 			iso14443a_crc(&Buff,1,&Buff[3]);
-log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL response is: 0x%02x,%02x,%02x,%02x,%02x",Buff[0],Buff[1],Buff[2],Buff[3],Buff[4]);
+//log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL response is: 0x%02x,%02x,%02x,%02x,%02x",Buff[0],Buff[1],Buff[2],Buff[3],Buff[4]);
 			//if(memcmp(&Buff+1,&Buff[3],2)!=0)return NFC_ERFTRANS;
 			if((Buff[1]!=Buff[3])||(Buff[2]!=Buff[4]))return NFC_ERFTRANS;
 			if((Buff[0]&SAK_UID_NCMPLT))cascade_level++;
@@ -480,7 +480,7 @@ log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL response is: 0x%02
 		}
 	} while(!SelDone);
 	if(cascade_level==0){
-		memcpy(rcti->nai.abtUid,&(cuid[0][0]),sizeof(cuid[0][0])); 
+		memcpy(rcti->nai.abtUid,&(cuid[0][0]),4); 
 		rcti->nai.szUidLen = 4;
 	}
 	if(cascade_level==1){
