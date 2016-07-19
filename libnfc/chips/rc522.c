@@ -387,7 +387,7 @@ rc522_inListPassiveTarget(struct nfc_device *pnd,
 	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "AtqA response is: 0x%02x%02x",Buff[1],Buff[0]);
 	//if((Buff[0] >> 6)&0x03)return NFC_ENOTIMPL;//TODO implement read UID longer than 4
 
-	CHK(rc522_select_anticollision_loop_new(pnd,pbtInitiatorData,szInitiatorData,nttmp, timeout));
+	CHK(rc522_select_anticollision_loop_new(pnd,pbtInitiatorData,szInitiatorData,&(nttmp.nti), timeout));
 	//memcpy(&(nttmp.nti.nai.abtUid),&Buff,4);
 	//nttmp.nti.nai.szUidLen=4;
 	//nttmp.nti.nai.btSak=Buff[4];
@@ -419,9 +419,9 @@ rc522_calc_bcc(uint8_t *InData){//uint8_t *OutData,size_t szLen){
 }
 
 int 
-rc522_select_anticollision_loop_new(struct nfc_device *pnd, 
+rc522_select_anticollision_loop_new(struct nfc_device *rcd, 
 									const uint8_t *pbtInitiatorData, const size_t szInitiatorData,
-									nfc_target *pnt, int timeout)
+									nfc_target_info *rcti, int timeout)
 {
 	int ret;
 	bool SelDone = 0;
@@ -447,7 +447,7 @@ rc522_select_anticollision_loop_new(struct nfc_device *pnd,
 			memcpy(&abtCmd[2],&cuid[cascade_level][0],4);
 			abtCmd[6]=rc522_calc_bcc(&abtCmd[2]);
 			iso14443a_crc_append(&abtCmd, 7);
-			CHK(rc522_rf_low_level_trx(pnd, CMD_TRANSCEIVE,0x30, abtCmd, 9*8, &Buff, 5,NULL, timeout));
+			CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSCEIVE,0x30, abtCmd, 9*8, &Buff, 5,NULL, timeout));
 			iso14443a_crc(&Buff,1,&Buff[3]);
 			if(memcmp(&Buff+1,&Buff[3],2)!=0)return NFC_ERFTRANS;
 			if((Buff[0]&SAK_UID_NCMPLT))cascade_level++;
@@ -459,7 +459,7 @@ rc522_select_anticollision_loop_new(struct nfc_device *pnd,
 		else {
 			abtCmd[0]=SEL+(2*cascade_level);
 			abtCmd[1]=0x20;
-			CHK(rc522_rf_low_level_trx(pnd, CMD_TRANSCEIVE,0x30, abtCmd, 2*8, &Buff, 5,NULL, timeout));
+			CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSCEIVE,0x30, abtCmd, 2*8, &Buff, 5,NULL, timeout));
 			//rc522_calc_bcc(&Buff); //check Bcc
 log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL response is: 0x%02x,%02x,%02x,%02x,%02x,%02x",Buff[0],Buff[1],Buff[2],Buff[3],Buff[4],rc522_calc_bcc(&Buff));
 			if(Buff[4]!=rc522_calc_bcc(&Buff))return NFC_ERFTRANS; 
@@ -467,7 +467,7 @@ log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL response is: 0x%02
 			memcpy(&cuid[cascade_level][0],&Buff,4); 
 			abtCmd[1]=0x70; //tx nvb to specify full UID to select command so we can get SAK.
 			iso14443a_crc_append(&abtCmd, 7);
-			CHK(rc522_rf_low_level_trx(pnd, CMD_TRANSCEIVE,0x30, abtCmd, 9*8, &Buff, 5,NULL, timeout));
+			CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSCEIVE,0x30, abtCmd, 9*8, &Buff, 5,NULL, timeout));
 			iso14443a_crc(&Buff,1,&Buff[3]);
 log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL response is: 0x%02x,%02x,%02x,%02x,%02x",Buff[0],Buff[1],Buff[2],Buff[3],Buff[4]);
 			//if(memcmp(&Buff+1,&Buff[3],2)!=0)return NFC_ERFTRANS;
@@ -479,27 +479,23 @@ log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL response is: 0x%02
 			}
 		}
 	} while(!SelDone);
-log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL Done");
 	if(cascade_level==0){
-		log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL Done");
-		memcpy(pnt->nti.nai.abtUid,&cuid[0][0],4); 
-		pnt->nti.nai.szUidLen = 4;
-		log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL Done");
+		memcpy(rcti->nai.abtUid,&(cuid[0][0]),sizeof(cuid[0][0])); 
+		rcti->nai.szUidLen = 4;
 	}
 	if(cascade_level==1){
-		memcpy(pnt->nti.nai.abtUid,&cuid[0][1],3);
-		memcpy(pnt->nti.nai.abtUid,&cuid[1][0],4);
-		pnt->nti.nai.szUidLen = 7;
+		memcpy(rcti->nai.abtUid,&(cuid[0][1]),3);
+		memcpy(rcti->nai.abtUid+3,&(cuid[1][0]),4);
+		rcti->nai.szUidLen = 7;
 	}
 	if(cascade_level==2){
-		memcpy(pnt->nti.nai.abtUid,&cuid[0][1],3);
-		memcpy(pnt->nti.nai.abtUid,&cuid[1][1],3);
-		memcpy(pnt->nti.nai.abtUid,&cuid[2][0],4);
-		pnt->nti.nai.szUidLen = 10;
+		memcpy(rcti->nai.abtUid,&(cuid[0][1]),3);
+		memcpy(rcti->nai.abtUid+3,&(cuid[1][1]),3);
+		memcpy(rcti->nai.abtUid+6,&(cuid[2][0]),4);
+		rcti->nai.szUidLen = 10;
 	}	
-	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL Done");
-	pnt->nti.nai.btSak=Buff[0]; 
-	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL Done");
+	rcti->nai.btSak=Buff[0]; 
+	//log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL Done");
 	//TODO implement RATS
 	//if(getRats){
 		
@@ -1213,11 +1209,11 @@ int rc522_init(struct nfc_device * pnd) {
 		// TODO: Implement another test, maybe?
 		ret = rc522_soft_reset(pnd);
 	}
-	//adding enable a global 25ms timeout in the chipset
-	CHK(rc522_write_reg(pnd, REG_TModeReg, 0x80));
-	CHK(rc522_write_reg(pnd, REG_TPrescalerReg, 0xA9));
-	CHK(rc522_write_reg(pnd, REG_TReloadRegH, 0x03));
-	CHK(rc522_write_reg(pnd, REG_TReloadRegL, 0xE8));
+	//adding enable a global 50ms timeout in the chipset
+	CHK(rc522_write_reg(pnd, REG_TModeReg, 0x80)); //set to auto and 0 for high 4 bits of prescale
+	CHK(rc522_write_reg(pnd, REG_TPrescalerReg, 0xA9)); //169 sets period to 25uS
+	CHK(rc522_write_reg(pnd, REG_TReloadRegH, 0x07)); //7D0 sets timer to 50ms
+	CHK(rc522_write_reg(pnd, REG_TReloadRegL, 0xD0));
 	
 	
 	CHK(rc522_write_reg(pnd, REG_TxASKReg, 0x40));
