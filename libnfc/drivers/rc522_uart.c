@@ -380,7 +380,7 @@ const struct nfc_driver rc522_uart_driver = {
 //	.initiator_poll_target				= rc522_initiator_poll_target,
 	
 	.initiator_select_dep_target		= NULL,
-//	.initiator_deselect_target			= rc522_initiator_deselect_target,
+	.initiator_deselect_target			= rc522_initiator_deselect_target,
 
 	.initiator_transceive_bytes			= rc522_initiator_transceive_bytes,
 	.initiator_transceive_bits			= rc522_initiator_transceive_bits,
