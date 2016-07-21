@@ -39,6 +39,7 @@ typedef enum {
 #define SEL  0x93 
 #define SEL2 0x95 
 #define SEL3 0x97 
+#define RATS 0xE0
 //SAK Response usefull bits
 #define SAK_UID_NCMPLT				(1 << 2) 
 #define SAK_ISO14443_4_COMPLIANT	(1 << 5)

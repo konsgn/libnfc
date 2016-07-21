@@ -606,7 +606,7 @@ nfc_initiator_list_passive_targets(nfc_device *pnd,
     if (szTargets == szTargetFound) {
       break;
     }
-	printf ("===> Malloced for tags\n");
+	
     nfc_initiator_deselect_target(pnd);
     // deselect has no effect on FeliCa and Jewel cards so we'll stop after one...
     // ISO/IEC 14443 B' cards are polled at 100% probability so it's not possible to detect correctly two cards at the same time

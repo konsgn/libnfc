@@ -86,6 +86,9 @@ int rc522_data_new(struct nfc_device * rcd, const struct rc522_io * io) {
 		perror("malloc");
 		return NFC_ESOFT;
 	}
+	
+	// Set current target to NULL
+	CHIP_DATA(rcd)->current_target = NULL;
 
 	CHIP_DATA(rcd)->io = io;
 	CHIP_DATA(rcd)->version = RC522_UNKNOWN;
@@ -388,7 +391,7 @@ rc522_initiator_deselect_target(struct nfc_device *rcd)
 {
 	int ret;
 	rc522_current_target_free(rcd);
-	uint8_t cmd = {HLTA,0x00,0x57,0xcd};
+	uint8_t cmd[] = {HLTA,0x00,0x57,0xcd};
 	return CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, cmd, 4*8, NULL, 0, NULL, NULL));    
 }
 
@@ -533,9 +536,18 @@ rc522_select_anticollision_loop_new(struct nfc_device *rcd,
 	rcti->nai.btSak=Buff[0]; 
 	//log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "SEL Done");
 	//TODO implement RATS
-	//if(getRats){
-		
-	//}
+	if(getRats){
+		abtCmd[0]=RATS;
+		abtCmd[1]=0x50; //0x50 means 5=up to 64 bytes, 0= Picc CID will be 0
+		iso14443a_crc_append(&abtCmd, 2);
+		CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSCEIVE,0x30, abtCmd, 4*8, &Buff, 64,NULL, timeout));
+		if(ret){
+			if(Buff[0]==(ret-2)){ //TODO checking CRC and length not just length
+				memcpy(rcti->nai.abtAts,&Buff[1],(Buff[0]-1)); //copy ats based on len byte minus that byte
+				rcti->nai.szAtsLen=(Buff[0]-1);
+			}
+		}
+	}
 	
 	
 	return NFC_SUCCESS;
