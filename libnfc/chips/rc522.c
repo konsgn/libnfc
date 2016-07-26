@@ -92,7 +92,7 @@ int rc522_data_new(struct nfc_device * rcd, const struct rc522_io * io) {
 
 	CHIP_DATA(rcd)->io = io;
 	CHIP_DATA(rcd)->version = RC522_UNKNOWN;
-	CHIP_DATA(rcd)->default_timeout = 500;
+	CHIP_DATA(rcd)->default_timeout = 200;
 	return NFC_SUCCESS;
 }
 
@@ -333,7 +333,10 @@ int rc522_initiator_select_passive_target(struct nfc_device *rcd,
                                       const uint8_t *pbtInitData, const size_t szInitData,
                                       nfc_target *rct)
 {
-  return rc522_initiator_select_passive_target_ext(rcd, nm, pbtInitData, szInitData, rct, 3000); 
+	if (nm.nmt != NMT_ISO14443A) {
+		return NFC_EINVARG;
+	}
+	return rc522_initiator_select_passive_target_ext(rcd, nm, pbtInitData, szInitData, rct, 3000); 
 }
 
 int rc522_initiator_select_passive_target_ext(struct nfc_device * rcd, const nfc_modulation nm, const uint8_t * pbtInitData, const size_t szInitData, nfc_target * rct, int timeout) {	
@@ -346,10 +349,6 @@ int rc522_initiator_select_passive_target_ext(struct nfc_device * rcd, const nfc
 	size_t  szTargetsData = sizeof(abtTargetsData);
 	nfc_target nttmp;
 	memset(&nttmp, 0x00, sizeof(nfc_target));
-	
-	if (nm.nmt != NMT_ISO14443A) {
-		return NFC_EINVARG;
-	}
 
 	CHK(rc522_set_rf_baud_rate(rcd, nm.nbr));
 
@@ -392,7 +391,7 @@ rc522_initiator_deselect_target(struct nfc_device *rcd)
 	int ret;
 	rc522_current_target_free(rcd);
 	uint8_t cmd[] = {HLTA,0x00,0x57,0xcd};
-	return CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, cmd, 4*8, NULL, 0, NULL, NULL));    
+	return CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSMIT,0x50, cmd, 4*8, NULL, 0, NULL, NULL));    
 }
 
 int 
@@ -414,26 +413,47 @@ rc522_inListPassiveTarget(struct nfc_device *rcd,
 	//if(szInitiatorData>4)
 		//return NFC_ENOTIMPL; //TODO Implement proper cascade levels...check iso14443-subr.c  
 
-	CHK(rc522_query_a_tags(rcd, &Buff, timeout));	
-	nttmp.nti.nai.abtAtqa[0]=Buff[1];
-	nttmp.nti.nai.abtAtqa[1]=Buff[0];
-	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "AtqA response is: 0x%02x%02x",Buff[1],Buff[0]);
-	//if((Buff[0] >> 6)&0x03)return NFC_ENOTIMPL;//TODO implement read UID longer than 4
 
-	CHK(rc522_select_anticollision_loop_new(rcd,pbtInitiatorData,szInitiatorData,&(nttmp.nti), timeout));
-	//memcpy(&(nttmp.nti.nai.abtUid),&Buff,4);
-	//nttmp.nti.nai.szUidLen=4;
-	//nttmp.nti.nai.btSak=Buff[4];
+log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Break Here1?");
+log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "szInitiatorData==NULL=%d,size=%d",(szInitiatorData==NULL),szInitiatorData);
+if(szInitiatorData)log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "pbtInitiatorData==%02x%02x%02x",*pbtInitiatorData,
+																											 *(pbtInitiatorData+1),
+																											 *(pbtInitiatorData+2));
 
+	if((szInitiatorData==NULL)||
+	(   (CHIP_DATA(rcd)->current_target!=NULL)  &&
+	    (memcmp(CHIP_DATA(rcd)->current_target->nti.nai.abtUid,pbtInitiatorData,szInitiatorData)!=0) ) ){
+		
+		log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Break Here2?");
+		if (szInitiatorData){CHK(rc522_wakeup_a_tags(rcd, &Buff, timeout));}
+		else {CHK(rc522_query_a_tags(rcd, &Buff, timeout));}
+		
+		nttmp.nti.nai.abtAtqa[0]=Buff[1];
+		nttmp.nti.nai.abtAtqa[1]=Buff[0];
+		log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "AtqA response is: 0x%02x%02x",Buff[1],Buff[0]);
+		//if((Buff[0] >> 6)&0x03)return NFC_ENOTIMPL;//TODO implement read UID longer than 4
+
+		CHK(rc522_select_anticollision_loop_new(rcd,pbtInitiatorData,szInitiatorData,&(nttmp.nti), timeout));
+		//memcpy(&(nttmp.nti.nai.abtUid),&Buff,4);
+		//nttmp.nti.nai.szUidLen=4;
+		//nttmp.nti.nai.btSak=Buff[4];
+		
+		if (rc522_current_target_new(rcd, &nttmp) == NULL) {
+			rcd->last_error = NFC_ESOFT;
+			return rcd->last_error;
+		}
+		
+		if(rct) memcpy(rct,&nttmp,sizeof(nfc_target));
+	}
+	else {
+		//TODO check if necessary
+		log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Break Here3?");
+		if(!rct) memcpy(rct,CHIP_DATA(rcd)->current_target,sizeof(nfc_target));
+	} 
+	
 	rcd->bEasyFraming = be_easy;
 	rc522_set_property_bool(rcd,NP_HANDLE_CRC,encrc);
-
-
-	if (rc522_current_target_new(rcd, &nttmp) == NULL) {
-		rcd->last_error = NFC_ESOFT;
-		return rcd->last_error;
-	}
-	if(rct) memcpy(rct,&nttmp,sizeof(nfc_target));
+	
 	//// Set the optional initiator data (for ISO14443A selecting a specific UID).
 	//if (pbtInitiatorData)
 	//memcpy(abtCmd + 3, pbtInitiatorData, szInitiatorData);
@@ -477,6 +497,7 @@ rc522_select_anticollision_loop_new(struct nfc_device *rcd,
 		//if(szInitiatorData>4)memcpy(&cuid[1][0],&abtCmd+6,4);
 		//if(szInitiatorData>7)memcpy(&cuid[2][0],&abtCmd+10,4);
 		memcpy(&cuid[0][0],&abtCmd+2,szTxData); //Can we just do this?
+		
 	}
 	//TODO implement anti-collision
 	do{
@@ -573,6 +594,15 @@ rc522_select_anticollision_loop(struct nfc_device *rcd, uint8_t * UIDSAK, int ti
 
 int
 rc522_query_a_tags(struct nfc_device *rcd, uint8_t * retReqa, int timeout)
+{
+	int ret;
+	uint8_t  abtCmd[1] = {REQA}; //TODO this is temp fix before current selected target is properly implemented
+	CHK(rc522_transceive_new(rcd, abtCmd, 7, retReqa, 2, timeout)); //TODO implement anticollision
+	return NFC_SUCCESS;
+}
+
+int
+rc522_wakeup_a_tags(struct nfc_device *rcd, uint8_t * retReqa, int timeout)
 {
 	int ret;
 	uint8_t  abtCmd[1] = {WUPA}; //TODO this is temp fix before current selected target is properly implemented
@@ -883,8 +913,17 @@ int rc522_transceive_new(struct nfc_device * rcd, const uint8_t * txData, const 
 	int ret;
 	uint8_t txdatawcrc [64] = {0,};
 	
-	if (rxMaxBytes)	{CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, txData, txBits, rxData, rxMaxBytes, NULL, timeout));}
-	else CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSMIT, 0x50, txData, txBits, rxData, rxMaxBytes, NULL, timeout));
+	if((txBits%8==0)&&rcd->bCrc){
+		memcpy(&txdatawcrc,txData,txBits/8);
+		iso14443a_crc_append(&txdatawcrc,txBits/8);
+		if (rxMaxBytes)	{CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, &txdatawcrc, txBits+16, rxData, rxMaxBytes, NULL, timeout));}
+		else CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSMIT, 0x50, &txdatawcrc, txBits+16, rxData, rxMaxBytes, NULL, timeout));
+	}
+	else{
+		if (rxMaxBytes)	{CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, txData, txBits, rxData, rxMaxBytes, NULL, timeout));}
+		else CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSMIT, 0x50, txData, txBits, rxData, rxMaxBytes, NULL, timeout));
+	}
+	
 	return ret;
 }
 
