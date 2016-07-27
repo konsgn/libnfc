@@ -419,12 +419,17 @@ log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "szInitiatorData==NULL=
 if(szInitiatorData)log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "pbtInitiatorData==%02x%02x%02x",*pbtInitiatorData,
 																											 *(pbtInitiatorData+1),
 																											 *(pbtInitiatorData+2));
+if(szInitiatorData)log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "CHIP_DATA==%02x%02x%02x",CHIP_DATA(rcd)->current_target->nti.nai.abtUid,
+																											 (CHIP_DATA(rcd)->current_target->nti.nai.abtUid+1),
+																											 (CHIP_DATA(rcd)->current_target->nti.nai.abtUid+2));
+	const size_t sizeuid=0;
+	iso14443_cascade_uid(&CHIP_DATA(rcd)->current_target->nti.nai.abtUid,&CHIP_DATA(rcd)->current_target->nti.nai.szUidLen,&Buff[0],&sizeuid);
 
+log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Break Here3?");
 	if((szInitiatorData==NULL)||
 	(   (CHIP_DATA(rcd)->current_target!=NULL)  &&
-	    (memcmp(CHIP_DATA(rcd)->current_target->nti.nai.abtUid,pbtInitiatorData,szInitiatorData)!=0) ) ){
-		
-		log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Break Here2?");
+	    (memcmp(&Buff,pbtInitiatorData,szInitiatorData)!=0) ) ){
+			
 		if (szInitiatorData){CHK(rc522_wakeup_a_tags(rcd, &Buff, timeout));}
 		else {CHK(rc522_query_a_tags(rcd, &Buff, timeout));}
 		
@@ -447,7 +452,7 @@ if(szInitiatorData)log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "pbt
 	}
 	else {
 		//TODO check if necessary
-		log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Break Here3?");
+log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Break Here4?");
 		if(!rct) memcpy(rct,CHIP_DATA(rcd)->current_target,sizeof(nfc_target));
 	} 
 	

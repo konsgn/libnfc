@@ -173,6 +173,17 @@ main(int argc, const char *argv[])
           printf("\n");
         }
       }
+      if ((res = nfc_initiator_list_passive_targets(pnd, nm, ant, MAX_TARGET_COUNT)) >= 0) {
+        int n;
+        if (verbose || (res > 0)) {
+          printf("%d ISO14443A passive target(s) found%s\n", res, (res == 0) ? ".\n" : ":");
+        }
+        for (n = 0; n < res; n++) {
+          print_nfc_target(&ant[n], verbose);
+          printf("\n");
+        }
+      }
+      
     }
 
     if (mask & 0x02) {
