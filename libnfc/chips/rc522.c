@@ -419,16 +419,21 @@ log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "szInitiatorData==NULL=
 if(szInitiatorData)log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "pbtInitiatorData==%02x%02x%02x",*pbtInitiatorData,
 																											 *(pbtInitiatorData+1),
 																											 *(pbtInitiatorData+2));
-if(szInitiatorData)log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "CHIP_DATA==%02x%02x%02x",CHIP_DATA(rcd)->current_target->nti.nai.abtUid,
-																											 (CHIP_DATA(rcd)->current_target->nti.nai.abtUid+1),
-																											 (CHIP_DATA(rcd)->current_target->nti.nai.abtUid+2));
-	const size_t sizeuid=0;
-	iso14443_cascade_uid(&CHIP_DATA(rcd)->current_target->nti.nai.abtUid,&CHIP_DATA(rcd)->current_target->nti.nai.szUidLen,&Buff[0],&sizeuid);
+			
+log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Break Here1?");	
+	if(CHIP_DATA(rcd)->current_target!=NULL){
+		memcpy(&nttmp,&CHIP_DATA(rcd)->current_target,sizeof(nfc_target));
+	}
+
+log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Break Here1?");
+	size_t sizeuid;
+	iso14443_cascade_uid(nttmp.nti.nai.abtUid,nttmp.nti.nai.szUidLen,&Buff,&sizeuid);
 
 log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Break Here3?");
-	if((szInitiatorData==NULL)||
-	(   (CHIP_DATA(rcd)->current_target!=NULL)  &&
-	    (memcmp(&Buff,pbtInitiatorData,szInitiatorData)!=0) ) ){
+	if((szInitiatorData==NULL)|| 								//Do selection process if in data is null or
+	   (CHIP_DATA(rcd)->current_target==NULL)|| 				// if current targut is null,
+	   (memcmp(&Buff,pbtInitiatorData,szInitiatorData)!=0)){	// or if selected target is not current target.
+		memset(&nttmp, 0x00, sizeof(nfc_target)); //clear out the tmp target we filled earlier.
 			
 		if (szInitiatorData){CHK(rc522_wakeup_a_tags(rcd, &Buff, timeout));}
 		else {CHK(rc522_query_a_tags(rcd, &Buff, timeout));}
@@ -491,17 +496,17 @@ rc522_select_anticollision_loop_new(struct nfc_device *rcd,
 	bool SelDone = 0;
 	bool getRats = 0;
 	uint8_t Buff[100]; // allocate enough room for 100 bytes of RATS? why not, I haven't seen longer than ~13
-	uint8_t  abtCmd[15] = {0,}; //NVB is 0x20 to select all cards
+	uint8_t  abtCmd[16] = {0,}; //NVB is 0x20 to select all cards
 	uint8_t cuid[3][4]={{0,},{0,},{0,}}; 
 	size_t szTxData;
 	uint8_t cascade_level = 0;
 	
 	if(szInitiatorData){
-		iso14443_cascade_uid(pbtInitiatorData,szInitiatorData,&abtCmd+2,&szTxData);
+		//iso14443_cascade_uid(pbtInitiatorData,szInitiatorData,&abtCmd+2,&szTxData); //this is already done in nfc.c
 		//memcpy(&cuid[0][0],&abtCmd+2,4);
 		//if(szInitiatorData>4)memcpy(&cuid[1][0],&abtCmd+6,4);
 		//if(szInitiatorData>7)memcpy(&cuid[2][0],&abtCmd+10,4);
-		memcpy(&cuid[0][0],&abtCmd+2,szTxData); //Can we just do this?
+		memcpy(&cuid[0][0],&abtCmd+2,szInitiatorData); //Can we just do this?...probably
 		
 	}
 	//TODO implement anti-collision
