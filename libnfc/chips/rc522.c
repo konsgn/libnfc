@@ -390,9 +390,30 @@ rc522_initiator_deselect_target(struct nfc_device *rcd)
 {
 	int ret;
 	rc522_current_target_free(rcd);
-	uint8_t cmd[] = {HLTA,0x00,0x57,0xcd};
-	return CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSMIT,0x50, cmd, 4*8, NULL, 0, NULL, NULL));    
+	if(rcd->bCrc){
+		rc522_set_property_bool(rcd,NP_HANDLE_CRC,0);
+		rcd->bCrc=0;
+		uint8_t cmd[4] = {HLTA,0x00,};
+		iso14443a_crc_append(&cmd, 2);
+		do{
+			ret=rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, cmd, 4*8, NULL, 1, NULL, NULL);
+			}
+		while(ret>=0);
+	}
+	return 0;
 }
+		
+		//uint8_t cmd[2] = {HLTA,0x00};
+		////return CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSMIT,0x50, cmd, 2*8, NULL, 0, NULL, NULL));  
+		//return CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, cmd, 2*8, NULL, 2, NULL, NULL));  
+	//}
+	//else {
+		//uint8_t cmd[4] = {HLTA,0x00,};
+		//iso14443a_crc_append(&cmd, 2);
+		////return CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSMIT,0x50, cmd, 4*8, NULL, 0, NULL, NULL));  
+		//return CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, cmd, 4*8, NULL, 2, NULL, NULL));  
+	//}  
+//}
 
 int 
 rc522_inListPassiveTarget(struct nfc_device *rcd,
@@ -437,6 +458,8 @@ log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Break Here3?");
 			
 		if (szInitiatorData){CHK(rc522_wakeup_a_tags(rcd, &Buff, timeout));}
 		else {CHK(rc522_query_a_tags(rcd, &Buff, timeout));}
+		//if (szInitiatorData){CHK(rc522_query_a_tags(rcd, &Buff, timeout));}
+		//else {CHK(rc522_wakeup_a_tags(rcd, &Buff, timeout));}
 		
 		nttmp.nti.nai.abtAtqa[0]=Buff[1];
 		nttmp.nti.nai.abtAtqa[1]=Buff[0];
