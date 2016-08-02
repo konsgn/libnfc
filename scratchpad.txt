@@ -25,3 +25,5 @@ easy_framing for the pn53x seems to hide all that from the examples. this is goi
 Less Bah! it seems rc522 can also do authentication/ crypto enable for mifare.. Woo!
 
 ... Perhaps it is time to completely redesign the rc522.c code.
+
+... Simplifying code into less subfunctions... adding baud rate change support

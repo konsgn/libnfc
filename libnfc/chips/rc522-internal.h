@@ -44,6 +44,27 @@ typedef enum {
 #define SAK_UID_NCMPLT				(1 << 2) 
 #define SAK_ISO14443_4_COMPLIANT	(1 << 5)
 
+//Adding definitions to understand RATS / verify baud settings
+#define RATS_Format_Ta 	(1 << 4)
+#define RATS_Format_Tb 	(1 << 5)
+#define RATS_Format_Tc 	(1 << 6)
+
+#define RATS_Ta_DS_212  (1 << 4) //Data send rate supported
+#define RATS_Ta_DS_424  (1 << 5) 
+#define RATS_Ta_DS_847  (1 << 6) 
+#define RATS_Ta_DR_212  (1 << 0) //Data recieve rate supported
+#define RATS_Ta_DR_424  (1 << 1) 
+#define RATS_Ta_DR_847  (1 << 2) 
+
+//Definitons to deselect before disconnect
+#define SBlock_Deselect 0xc2 //no cid following deselects all?
+
+//Definition to select baud rate as in ISO14443-4
+#define PPSS 	0xD0 //always selects cid 1
+#define PPS0    0x11 //says there will be pps1
+#define PPS1	0x00 // this will set baud to 106 aka divisor 1
+#define PPS1_PACK(x) 	( ( ((x-1)&0x03) | (((x-1)<<2)&0x0c) ) ) //where x is of type nfc_baud_rate
+
 //Adding definitions to know when to turn on/off crc to properly emulate easy-framing.
 //Mifare Classic commands
 #define  MC_AUTH_A 0x60
