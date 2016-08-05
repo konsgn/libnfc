@@ -87,6 +87,9 @@ int rc522_data_new(struct nfc_device * rcd, const struct rc522_io * io) {
 		return NFC_ESOFT;
 	}
 	
+	//default easy_frame on, to handle desfire EV1
+	rcd->bEasyFraming=1;
+	
 	// Set current target to NULL
 	CHIP_DATA(rcd)->current_target = NULL;
 
@@ -351,7 +354,7 @@ int rc522_initiator_select_passive_target_ext(struct nfc_device * rcd, const nfc
 	memset(&nttmp, 0x00, sizeof(nfc_target));
 
 	bool be_easy = rcd->bEasyFraming;
-	rcd->bEasyFraming =0;
+	rc522_set_property_bool(rcd,NP_EASY_FRAMING,0);
 	bool encrc   = rcd->bCrc;
 	rc522_set_property_bool(rcd,NP_HANDLE_CRC,0);
 
@@ -364,7 +367,7 @@ int rc522_initiator_select_passive_target_ext(struct nfc_device * rcd, const nfc
         if ((ret == NFC_ERFTRANS)) { // Chip timeout
           continue;
         } else {
-			rcd->bEasyFraming = be_easy;
+			rc522_set_property_bool(rcd,NP_EASY_FRAMING,be_easy);
 			rc522_set_property_bool(rcd,NP_HANDLE_CRC,encrc);
 			return ret;
 		}
@@ -394,7 +397,7 @@ int rc522_initiator_select_passive_target_ext(struct nfc_device * rcd, const nfc
 		return 1;
 	}
 	
-	rcd->bEasyFraming = be_easy;
+	rc522_set_property_bool(rcd,NP_EASY_FRAMING,be_easy);
 	rc522_set_property_bool(rcd,NP_HANDLE_CRC,encrc);
 	
 	return 0;
@@ -647,6 +650,13 @@ log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "cuid[0]: 0x%02x,%02x,%
 				memcpy(rcti->nai.abtAts,&Buff[1],(Buff[0]-1)); //copy ats based on len byte minus that byte
 				rcti->nai.szAtsLen=(Buff[0]-1);
 			}
+			
+			
+				////testing stuff
+				//abtCmd[1]=0x60; //test some communication from https://ridrix.wordpress.com/tag/desfire-commands/
+				//abtCmd[0]=0x02; 
+				//iso14443a_crc_append(&abtCmd, 2);
+				//CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSCEIVE,0x30, abtCmd, 4*8, &Buff, 10,NULL, timeout));
 		}
 		
 		//selecting appropriate baud if chosen & PPS available
@@ -659,6 +669,12 @@ log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "cuid[0]: 0x%02x,%02x,%
 				CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSCEIVE,0x30, abtCmd, 5*8, &Buff, 3,NULL, timeout));
 				iso14443a_crc(&Buff,1,&Buff[3]);
 				if((Buff[1]==Buff[3])&(Buff[2]==Buff[4])) {CHK(rc522_set_rf_baud_rate(rcd, tbr));}
+				
+				//testing stuff
+				//abtCmd[0]=0x60; //test some communication from https://ridrix.wordpress.com/tag/desfire-commands/
+				//abtCmd[1]=0x50; //0x50 means 5=up to 64 bytes, 0= Picc CID will be 0
+				//iso14443a_crc_append(&abtCmd, 1);
+				//CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSCEIVE,0x30, abtCmd, 3*8, &Buff, 10,NULL, timeout));
 //log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "ret set baud=%d",ret);
 				//return ret;
 			}
@@ -1004,19 +1020,42 @@ int rc522_rf_rx(struct nfc_device * rcd, uint8_t * rxData, const size_t rxMaxByt
 }
 
 int rc522_transceive_new(struct nfc_device * rcd, const uint8_t * txData, const size_t txBits, uint8_t * rxData, const size_t rxMaxBytes, int timeout) {
-	int ret;
-	uint8_t txdatawcrc [64] = {0,};
+	#ifdef func_DEBUG 
+	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_transceive_new,beasy:%d",rcd->bEasyFraming);
+	#endif
 	
-	if((txBits%8==0)&&!rcd->bCrc){
-		memcpy(&txdatawcrc,txData,txBits/8);
-		iso14443a_crc_append(&txdatawcrc,txBits/8);
-		if (rxMaxBytes)	{CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, &txdatawcrc, txBits+16, rxData, rxMaxBytes, NULL, timeout));}
-		else CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSMIT, 0x50, &txdatawcrc, txBits+16, rxData, rxMaxBytes, NULL, timeout));
+	int ret;
+	uint8_t buff[rxMaxBytes];
+	
+	if((rcd->bEasyFraming)&&(CHIP_DATA(rcd)->current_target->nti.nai.szAtsLen)){ //if there is an ATS, then iso14443-4 is supported.. use it
+
+		char txcounts = txBits/61;
+		uint8_t txs[txcounts][64];
+		iso14443_block_frame_data(txData,txBits,64,*txs);
+		
+		for (char i=0;i<txcounts;i++){
+			CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, &txs[i][1], txs[i][0], buff, rxMaxBytes, NULL, timeout));
+			if(buff[0]==(0xA2|(txs[i][1]&0x01)))continue;
+			if(buff[0]==(0xA2|((txs[i][1]&0x01)^0x01))){i--;continue;}//block doesn't match, repeat tx
+		}
+		if ((ret>1)&&(buff[0]==0x02)) memcpy(rxData,&buff[1],ret);
+		return ret-1;
 	}
 	else{
 		if (rxMaxBytes)	{CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, txData, txBits, rxData, rxMaxBytes, NULL, timeout));}
 		else CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSMIT, 0x50, txData, txBits, rxData, rxMaxBytes, NULL, timeout));
 	}
+	
+	//if((txBits%8==0)&&!rcd->bCrc){
+		//memcpy(&txdatawcrc,txData,txBits/8);
+		//iso14443a_crc_append(&txdatawcrc,txBits/8);
+		//if (rxMaxBytes)	{CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, &txdatawcrc, txBits+16, rxData, rxMaxBytes, NULL, timeout));}
+		//else CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSMIT, 0x50, &txdatawcrc, txBits+16, rxData, rxMaxBytes, NULL, timeout));
+	//}
+	//else{
+		//if (rxMaxBytes)	{CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, txData, txBits, rxData, rxMaxBytes, NULL, timeout));}
+		//else CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSMIT, 0x50, txData, txBits, rxData, rxMaxBytes, NULL, timeout));
+	//}
 	
 	return ret;
 }

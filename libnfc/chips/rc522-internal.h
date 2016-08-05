@@ -60,7 +60,7 @@ typedef enum {
 #define SBlock_Deselect 0xc2 //no cid following deselects all?
 
 //Definition to select baud rate as in ISO14443-4
-#define PPSS 	0xD0 //always selects cid 1
+#define PPSS 	0xD0 //always selects cid 0
 #define PPS0    0x11 //says there will be pps1
 #define PPS1	0x00 // this will set baud to 106 aka divisor 1
 #define PPS1_PACK(x) 	( ( ((x-1)&0x03) | (((x-1)<<2)&0x0c) ) ) //where x is of type nfc_baud_rate

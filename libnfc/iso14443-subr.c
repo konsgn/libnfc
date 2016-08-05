@@ -158,3 +158,36 @@ iso14443_cascade_uid(const uint8_t abtUID[], const size_t szUID, uint8_t *pbtCas
       break;
   }
 }
+
+/**
+ * @brief Frame raw transmissions according to iso14443-4
+ * @see ISO/IEC 14443-4 (7.1 Block Format)
+ *
+ * @param Data struct pointer to data sequence to transmit
+ * @param szDataBits containing amount of data to send
+ * @param FSC_FSD size of max array width (max transmitted/recieved bytes)
+ * @param ptxArray points to the array to fill.
+ * @note ptxArray is an array of type [min amount of blocks to fit all][FSC_FSD+1] the +1 to array width allows for sz of tx bytes for that block 
+ */
+void
+iso14443_block_frame_data(const uint8_t Data[], const size_t szDataBits,const size_t FSC_FSD, uint8_t *ptxArray)
+{
+ size_t bytes= szDataBits/8;
+ size_t data_per_block= FSC_FSD-1; // size of each tx block -1 PCB byte
+ size_t block_count= bytes/data_per_block;
+	for (int i=0;i<block_count;i++){
+		if(bytes>data_per_block){ 
+			*ptxArray++ = FSC_FSD; //first byte of array defines tx bytes for that block
+			*ptxArray++ = 0x12|(i&0x01); //to create an alternating block number distinguishing successive blocks
+			memcpy(ptxArray,Data+(i*data_per_block),data_per_block);
+			bytes-=(FSC_FSD-1);
+		}
+		else {
+			*ptxArray++ = bytes+1; //first byte of array defines tx bytes for that block
+			*ptxArray++ = 0x02|(i&0x01); //to create an alternating block number distinguishing successive blocks
+			memcpy(ptxArray,Data+(i*data_per_block),bytes);
+			bytes=0;
+		}	
+	}
+}
+
