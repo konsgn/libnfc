@@ -652,7 +652,7 @@ log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "cuid[0]: 0x%02x,%02x,%
 			}
 			
 			
-				////testing stuff
+				//////testing stuff
 				//abtCmd[1]=0x60; //test some communication from https://ridrix.wordpress.com/tag/desfire-commands/
 				//abtCmd[0]=0x02; 
 				//iso14443a_crc_append(&abtCmd, 2);
@@ -670,11 +670,12 @@ log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "cuid[0]: 0x%02x,%02x,%
 				iso14443a_crc(&Buff,1,&Buff[3]);
 				if((Buff[1]==Buff[3])&(Buff[2]==Buff[4])) {CHK(rc522_set_rf_baud_rate(rcd, tbr));}
 				
-				//testing stuff
-				//abtCmd[0]=0x60; //test some communication from https://ridrix.wordpress.com/tag/desfire-commands/
-				//abtCmd[1]=0x50; //0x50 means 5=up to 64 bytes, 0= Picc CID will be 0
-				//iso14443a_crc_append(&abtCmd, 1);
-				//CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSCEIVE,0x30, abtCmd, 3*8, &Buff, 10,NULL, timeout));
+				////testing stuff
+				//abtCmd[1]=0x60; //test some communication from https://ridrix.wordpress.com/tag/desfire-commands/
+				//abtCmd[0]=0x02; //0x50 means 5=up to 64 bytes, 0= Picc CID will be 0
+				//iso14443a_crc_append(&abtCmd, 2);
+				//CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSCEIVE,0x30, abtCmd, 4*8, &Buff, 10,NULL, timeout));
+				
 //log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "ret set baud=%d",ret);
 				//return ret;
 			}
@@ -826,16 +827,17 @@ int rc522_rf_low_level_trx(struct nfc_device * rcd, rc522_cmd cmd,
 		}
 	}
 	
-	if(rxMaxBytes&&(rcd->bCrc)){ //Do CRC check if enabled.
-		uint8_t CRC[2]={0,};
-		if (rxMaxBytes == 1 && *validBits == 4) {
-			return rxdbytes;
-		}
-		if (rxMaxBytes>2){
-			iso14443a_crc(rxData,rxdbytes-2,&CRC);
-			if(memcmp(rxData+(rxdbytes-2),&CRC,2)!=0)return NFC_ERFTRANS;
-		}
-	}
+	// At no point do we need this, if chip crc is not enabled, we do it manually
+	//if(rxMaxBytes&&(!rcd->bCrc)){ //Do CRC check if chip handling is not enabled.
+		//uint8_t CRC[2]={0,};
+		//if (rxMaxBytes == 1 && *validBits == 4) {
+			//return rxdbytes;
+		//}
+		//if (rxMaxBytes>2){
+			//iso14443a_crc(rxData,rxdbytes-2,&CRC);
+			//if(memcmp(rxData+(rxdbytes-2),&CRC,2)!=0)return NFC_ERFTRANS;
+		//}
+	//}
 	return rxdbytes;
 }
 
@@ -1027,19 +1029,23 @@ int rc522_transceive_new(struct nfc_device * rcd, const uint8_t * txData, const 
 	int ret;
 	uint8_t buff[rxMaxBytes];
 	
-	if((rcd->bEasyFraming)&&(CHIP_DATA(rcd)->current_target->nti.nai.szAtsLen)){ //if there is an ATS, then iso14443-4 is supported.. use it
+	if((rcd->bEasyFraming)&&(CHIP_DATA(rcd)->current_target->nti.nai.szAtsLen)){ //if there is an ATS, then iso14443-4 is supported.. use it(framing)
 
-		char txcounts = txBits/61;
-		uint8_t txs[txcounts][64];
-		iso14443_block_frame_data(txData,txBits,64,*txs);
-		
+		char txcounts = (txBits/(63*8))+1;
+		uint8_t txs[txcounts][64+1];
+//#ifdef func_DEBUG 
+//log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, " txcounts:0x%04x txbits:%d txs:0x%04x",txcounts,txBits,&txs);
+//#endif
+		iso14443_block_frame_data(txData, txBits, 64, &txs);	
 		for (char i=0;i<txcounts;i++){
-			CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, &txs[i][1], txs[i][0], buff, rxMaxBytes, NULL, timeout));
+			CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, &(txs[i][1]), (txs[i][0])*8, &buff, rxMaxBytes, NULL, timeout));
 			if(buff[0]==(0xA2|(txs[i][1]&0x01)))continue;
 			if(buff[0]==(0xA2|((txs[i][1]&0x01)^0x01))){i--;continue;}//block doesn't match, repeat tx
 		}
-		if ((ret>1)&&(buff[0]==0x02)) memcpy(rxData,&buff[1],ret);
-		return ret-1;
+		if ((ret>1)&&(buff[0]==0x02)) {
+			memcpy(rxData,&(buff[1]),(ret-1));
+			return (ret-1);
+		}
 	}
 	else{
 		if (rxMaxBytes)	{CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, txData, txBits, rxData, rxMaxBytes, NULL, timeout));}
