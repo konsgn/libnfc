@@ -39,7 +39,8 @@
 #define TIMEOUT_DEFAULT 50
 #define TIMEOUT_NEVER 0
 
-//#define Mask_Timeout 1
+//#define Mask_Timeout //this is locally set with wait_irq
+
 
 const nfc_modulation_type rc522_initiator_modulation[] = { NMT_ISO14443A, 0 };
 const nfc_modulation_type rc522_target_modulation[] = { 0 };
@@ -407,34 +408,23 @@ int
 rc522_initiator_deselect_target(struct nfc_device *rcd)
 {
 	int ret;
-	if(rcd->bCrc){
-		uint8_t cmd[4] = {HLTA,0x00,};
-		iso14443a_crc_append(&cmd, 2);
-		if((CHIP_DATA(rcd)->current_target->nti.nai.btSak)&SAK_ISO14443_4_COMPLIANT){
-			uint8_t cmdd[3] = {SBlock_Deselect,0,};
-			iso14443a_crc_append(&cmdd, 1);
-			ret=rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, cmdd, 1*8, NULL, 6, NULL, NULL);
-			//TODO handle responese to disconnect
-			}
-		do{
-			ret=rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, cmd, 2*8, NULL, 1, NULL, NULL);
-			}
-		while(ret>=0);
-	}
-	else{
-		uint8_t cmd[4] = {HLTA,0x00,};
-		iso14443a_crc_append(&cmd, 2);
-		if((CHIP_DATA(rcd)->current_target->nti.nai.btSak)&SAK_ISO14443_4_COMPLIANT){
-			uint8_t cmdd[3] = {SBlock_Deselect,0,};
-			iso14443a_crc_append(&cmdd, 1);
-			ret=rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, cmdd, 3*8, NULL, 6, NULL, NULL);
-			//TODO handle responese to disconnect
-			}
-		do{
-			ret=rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, cmd, 4*8, NULL, 1, NULL, NULL);
-			}
-		while(ret>=0);
-	}
+	//TODO change to actually tx the right amount occording to crc
+	uint8_t cmd[4] = {HLTA,0x00,};
+	iso14443a_crc_append(&cmd, 2);
+	if((CHIP_DATA(rcd)->current_target->nti.nai.btSak)&SAK_ISO14443_4_COMPLIANT){
+		uint8_t cmdd[3] = {SBlock_Deselect,0,};
+		iso14443a_crc_append(&cmdd, 1);
+		if(rcd->bCrc){ret=rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, cmdd, 3*8, NULL, 6, NULL, NULL);}
+		else{ret=rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, cmdd, 3*8, NULL, 6, NULL, NULL);}
+		
+		//TODO handle responese to disconnect
+		}
+	do{
+		if(rcd->bCrc){ret=rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, cmd, 4*8, NULL, 6, NULL, NULL);}
+		else{ret=rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, cmd, 4*8, NULL, 6, NULL, NULL);}
+		}
+	while(ret>=0);
+	
 	rc522_current_target_free(rcd);
 	return 0;
 }
@@ -659,27 +649,28 @@ log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "cuid[0]: 0x%02x,%02x,%
 				//CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSCEIVE,0x30, abtCmd, 4*8, &Buff, 10,NULL, timeout));
 		}
 		
-		//selecting appropriate baud if chosen & PPS available
-		if(szInitiatorData&&(tbr!=(NBR_106||NBR_UNDEFINED||NULL))){ //only perform this action if specifically selecting a target & baud > 106.
-			if(RATS_Check_Baud(rcti->nai.abtAts,tbr)){
-				abtCmd[0]=PPSS;
-				abtCmd[1]=PPS0;
-				abtCmd[2]=PPS1_PACK(tbr);
-				iso14443a_crc_append(&abtCmd, 3);
-				CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSCEIVE,0x30, abtCmd, 5*8, &Buff, 3,NULL, timeout));
-				iso14443a_crc(&Buff,1,&Buff[3]);
-				if((Buff[1]==Buff[3])&(Buff[2]==Buff[4])) {CHK(rc522_set_rf_baud_rate(rcd, tbr));}
+		//TODO re-implement properly baud rate change... comm to chip isn't fast enough now.
+		////selecting appropriate baud if chosen & PPS available
+		//if(szInitiatorData&&(tbr!=(NBR_106||NBR_UNDEFINED||NULL))){ //only perform this action if specifically selecting a target & baud > 106.
+			//if(RATS_Check_Baud(rcti->nai.abtAts,tbr)){
+				//abtCmd[0]=PPSS;
+				//abtCmd[1]=PPS0;
+				//abtCmd[2]=PPS1_PACK(tbr);
+				//iso14443a_crc_append(&abtCmd, 3);
+				//CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSCEIVE,0x30, abtCmd, 5*8, &Buff, 3,NULL, timeout));
+				//iso14443a_crc(&Buff,1,&Buff[3]);
+				//if((Buff[1]==Buff[3])&(Buff[2]==Buff[4])) {CHK(rc522_set_rf_baud_rate(rcd, tbr));}
 				
-				////testing stuff
-				//abtCmd[1]=0x60; //test some communication from https://ridrix.wordpress.com/tag/desfire-commands/
-				//abtCmd[0]=0x02; //0x50 means 5=up to 64 bytes, 0= Picc CID will be 0
-				//iso14443a_crc_append(&abtCmd, 2);
-				//CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSCEIVE,0x30, abtCmd, 4*8, &Buff, 10,NULL, timeout));
+				//////testing stuff
+				////abtCmd[1]=0x60; //test some communication from https://ridrix.wordpress.com/tag/desfire-commands/
+				////abtCmd[0]=0x02; //0x50 means 5=up to 64 bytes, 0= Picc CID will be 0
+				////iso14443a_crc_append(&abtCmd, 2);
+				////CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSCEIVE,0x30, abtCmd, 4*8, &Buff, 10,NULL, timeout));
 				
-//log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "ret set baud=%d",ret);
-				//return ret;
-			}
-		}
+////log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "ret set baud=%d",ret);
+				////return ret;
+			//}
+		//}
 			
 	}
 	return NFC_SUCCESS;
@@ -707,7 +698,12 @@ int
 rc522_query_a_tags(struct nfc_device *rcd, uint8_t * retReqa, int timeout)
 {
 	int ret;
-	uint8_t  abtCmd[1] = {REQA}; //TODO this is temp fix before current selected target is properly implemented
+	uint8_t  abtCmd[1] = {REQA}; 
+	
+	//WTF This shouldn't be necessary, but auto timer doesn't reset without this when crc hasn't been toggled.
+	CHK(rc522_write_reg_mask(rcd, REG_TxModeReg, 0, REG_TxModeReg_TxCRCEn));
+	CHK(rc522_write_reg_mask(rcd, REG_RxModeReg, 0, REG_RxModeReg_RxCRCEn));
+	
 	CHK(rc522_transceive_new(rcd, abtCmd, 7, retReqa, 2, timeout)); //TODO implement anticollision
 	return NFC_SUCCESS;
 }
@@ -828,16 +824,17 @@ int rc522_rf_low_level_trx(struct nfc_device * rcd, rc522_cmd cmd,
 	}
 	
 	// At no point do we need this, if chip crc is not enabled, we do it manually
-	//if(rxMaxBytes&&(!rcd->bCrc)){ //Do CRC check if chip handling is not enabled.
-		//uint8_t CRC[2]={0,};
-		//if (rxMaxBytes == 1 && *validBits == 4) {
-			//return rxdbytes;
-		//}
-		//if (rxMaxBytes>2){
-			//iso14443a_crc(rxData,rxdbytes-2,&CRC);
-			//if(memcmp(rxData+(rxdbytes-2),&CRC,2)!=0)return NFC_ERFTRANS;
-		//}
-	//}
+	//... after disabling baud rate changes, we now do crc checking manually. 
+	if(rxMaxBytes&&(rcd->bCrc)){ //Do CRC check if crc is enabled
+		uint8_t CRC[2]={0,};
+		if (rxMaxBytes == 1 && *validBits == 4) {
+			return rxdbytes;
+		}
+		if (rxMaxBytes>2){
+			iso14443a_crc(rxData,rxdbytes-2,&CRC);
+			if(memcmp(rxData+(rxdbytes-2),&CRC,2)!=0)return NFC_ERFTRANS;
+		}
+	}
 	return rxdbytes;
 }
 
@@ -1025,20 +1022,21 @@ int rc522_transceive_new(struct nfc_device * rcd, const uint8_t * txData, const 
 	#ifdef func_DEBUG 
 	log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, "Function: rc522_transceive_new,beasy:%d",rcd->bEasyFraming);
 	#endif
-	
+	uint8_t txBytes[(txBits/8+2)];
 	int ret;
 	uint8_t buff[rxMaxBytes];
 	
 	if((rcd->bEasyFraming)&&(CHIP_DATA(rcd)->current_target->nti.nai.szAtsLen)){ //if there is an ATS, then iso14443-4 is supported.. use it(framing)
 
-		char txcounts = (txBits/(63*8))+1;
+		char txcounts = (txBits/(61*8))+1;
 		uint8_t txs[txcounts][64+1];
 //#ifdef func_DEBUG 
 //log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, " txcounts:0x%04x txbits:%d txs:0x%04x",txcounts,txBits,&txs);
 //#endif
 		iso14443_block_frame_data(txData, txBits, 64, &txs);	
 		for (char i=0;i<txcounts;i++){
-			CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, &(txs[i][1]), (txs[i][0])*8, &buff, rxMaxBytes, NULL, timeout));
+			if(rcd->bCrc)iso14443a_crc_append(&(txs[i][1]),(txs[i][0]));
+			CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, &(txs[i][1]), (txs[i][0])*8+16, &buff, rxMaxBytes, NULL, timeout));
 			if(buff[0]==(0xA2|(txs[i][1]&0x01)))continue;
 			if(buff[0]==(0xA2|((txs[i][1]&0x01)^0x01))){i--;continue;}//block doesn't match, repeat tx
 		}
@@ -1047,9 +1045,17 @@ int rc522_transceive_new(struct nfc_device * rcd, const uint8_t * txData, const 
 			return (ret-1);
 		}
 	}
+	//end of easy framing for iso14443-4
+	
 	else{
-		if (rxMaxBytes)	{CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, txData, txBits, rxData, rxMaxBytes, NULL, timeout));}
-		else CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSMIT, 0x50, txData, txBits, rxData, rxMaxBytes, NULL, timeout));
+		if(rcd->bCrc){memcpy(&txBytes,txData,(txBits/8));iso14443a_crc_append(&txBytes,(txBits/8));
+			if (rxMaxBytes)	{CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, &txBytes, txBits+16, rxData, rxMaxBytes, NULL, timeout));}
+			else CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSMIT, 0x50, &txBytes, txBits+16, rxData, rxMaxBytes, NULL, timeout));
+		}
+		else {
+			if (rxMaxBytes) {CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, txData, txBits, rxData, rxMaxBytes, NULL, timeout));}
+			else CHK(rc522_rf_low_level_trx(rcd, CMD_TRANSMIT, 0x50, txData, txBits, rxData, rxMaxBytes, NULL, timeout));
+		}
 	}
 	
 	//if((txBits%8==0)&&!rcd->bCrc){
@@ -1178,9 +1184,11 @@ int rc522_set_property_bool(struct nfc_device * rcd, const nfc_property property
 			if (rcd->bCrc == enable) {
 				return NFC_SUCCESS;
 			}
-
-			CHK(rc522_write_reg_mask(rcd, REG_TxModeReg, enable ? ~0 : 0, REG_TxModeReg_TxCRCEn));
-			CHK(rc522_write_reg_mask(rcd, REG_RxModeReg, enable ? ~0 : 0, REG_RxModeReg_RxCRCEn));
+			
+			//TODO mfrc522 only can do crc when not at 106kbs, fix baud rate change first.
+			//currently using bool to tell low level trx to do software crc.
+			//CHK(rc522_write_reg_mask(rcd, REG_TxModeReg, enable ? ~0 : 0, REG_TxModeReg_TxCRCEn));
+			//CHK(rc522_write_reg_mask(rcd, REG_RxModeReg, enable ? ~0 : 0, REG_RxModeReg_RxCRCEn));
 
 			rcd->bCrc = enable;
 			return NFC_SUCCESS;

@@ -31,3 +31,8 @@ Less Bah! it seems rc522 can also do authentication/ crypto enable for mifare.. 
 LIBNFC_LOG_LEVEL=3 LIBNFC_DEFAULT_DEVICE="rc522_uart:/dev/ttyUSB0" libfreefare/examples/mifare-desfire-info
 
 .. implement easy_framing properly... need to create frame commands from iso14443-4
+
+..disabled rx crc check turnon
+
+..removing selection of alternate baud rates.. return to it when comm via uart is optimized.
+...side-effect: crc not possible on chip at 106kbs , so only do software crc for now.

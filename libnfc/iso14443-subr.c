@@ -173,18 +173,18 @@ void
 iso14443_block_frame_data(const uint8_t *Data, const size_t szDataBits,const size_t FSC_FSD, uint8_t *ptxArray)
 {
  size_t bytes= (szDataBits/8);
- size_t data_per_block= FSC_FSD-1; // size of each tx block -1 PCB byte
+ size_t data_per_block= FSC_FSD-3; // size of each tx block -1 PCB byte -2 crc
  size_t block_count= (bytes/data_per_block)+1;
 	for (int i=0;i<block_count;i++){
 		if(bytes>data_per_block){ 
-			*ptxArray++ = FSC_FSD; //first byte of array defines tx bytes for that block
+			*ptxArray++ = FSC_FSD-2; //first byte of array defines tx bytes for that block minus crc allocation
 			*ptxArray++ = 0x12|(i&0x01); //to create an alternating block number distinguishing successive blocks
 			memcpy(ptxArray,Data+(i*data_per_block),data_per_block);
-			ptxArray+=data_per_block;
+			ptxArray+=data_per_block+2; //add 2 for crc reservation
 			bytes-=data_per_block;
 		}
 		else {
-			*ptxArray++ = bytes+1; //first byte of array defines tx bytes for that block
+			*ptxArray++ = bytes+1; //first byte of array defines tx bytes for that block not including crc
 			*ptxArray++ = 0x02|(i&0x01); //to create an alternating block number distinguishing successive blocks
 			memcpy(ptxArray,Data+(i*data_per_block),bytes);
 			bytes=0;
