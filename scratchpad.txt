@@ -32,7 +32,10 @@ LIBNFC_LOG_LEVEL=3 LIBNFC_DEFAULT_DEVICE="rc522_uart:/dev/ttyUSB0" libfreefare/e
 
 .. implement easy_framing properly... need to create frame commands from iso14443-4
 
-..disabled rx crc check turnon
+..disabled rx crc check turnon when not supposed to
 
 ..removing selection of alternate baud rates.. return to it when comm via uart is optimized.
-...side-effect: crc not possible on chip at 106kbs , so only do software crc for now.
+...side-effect: crc not possible (seemed to work sometimes?) on chip at 106kbs , so only do software crc for now.
+
+. have to add global block number so that sebsequent communications with iso14443-4 tag use 
+  the right block number. global being added to current target data.

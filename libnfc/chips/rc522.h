@@ -27,6 +27,7 @@ struct rc522_chip_data {
 	/** Current target to speed up selection*/
 	nfc_target *current_target;
 	const struct rc522_io * io;
+	bool iso14443_block_num;
 	uint8_t version;
 	int default_timeout;
 };

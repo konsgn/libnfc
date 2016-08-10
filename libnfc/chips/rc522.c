@@ -70,6 +70,7 @@ rc522_current_target_new(const struct nfc_device *rcd, const nfc_target *rct)
     return NULL;
   }
   memcpy(CHIP_DATA(rcd)->current_target, rct, sizeof(nfc_target));
+  CHIP_DATA(rcd)->iso14443_block_num=0;
   return CHIP_DATA(rcd)->current_target;
 }
 
@@ -832,7 +833,8 @@ int rc522_rf_low_level_trx(struct nfc_device * rcd, rc522_cmd cmd,
 		}
 		if (rxMaxBytes>2){
 			iso14443a_crc(rxData,rxdbytes-2,&CRC);
-			if(memcmp(rxData+(rxdbytes-2),&CRC,2)!=0)return NFC_ERFTRANS;
+			if(memcmp(rxData+(rxdbytes-2),&CRC,2)!=0){return NFC_ERFTRANS;}
+			else{return rxdbytes-2;}
 		}
 	}
 	return rxdbytes;
@@ -1033,14 +1035,14 @@ int rc522_transceive_new(struct nfc_device * rcd, const uint8_t * txData, const 
 //#ifdef func_DEBUG 
 //log_put(LOG_GROUP, LOG_CATEGORY, NFC_LOG_PRIORITY_DEBUG, " txcounts:0x%04x txbits:%d txs:0x%04x",txcounts,txBits,&txs);
 //#endif
-		iso14443_block_frame_data(txData, txBits, 64, &txs);	
+		iso14443_block_frame_data(&(CHIP_DATA(rcd)->iso14443_block_num), txData, txBits, 64, &txs);	
 		for (char i=0;i<txcounts;i++){
 			if(rcd->bCrc)iso14443a_crc_append(&(txs[i][1]),(txs[i][0]));
 			CHK(rc522_rf_low_level_trx(rcd,CMD_TRANSCEIVE,0x30, &(txs[i][1]), (txs[i][0])*8+16, &buff, rxMaxBytes, NULL, timeout));
 			if(buff[0]==(0xA2|(txs[i][1]&0x01)))continue;
 			if(buff[0]==(0xA2|((txs[i][1]&0x01)^0x01))){i--;continue;}//block doesn't match, repeat tx
 		}
-		if ((ret>1)&&(buff[0]==0x02)) {
+		if ((ret>1)&&(buff[0]==(0x02|(txs[txcounts-1][1]&0x01)))) {
 			memcpy(rxData,&(buff[1]),(ret-1));
 			return (ret-1);
 		}
